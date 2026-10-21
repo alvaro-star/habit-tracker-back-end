@@ -2,6 +2,23 @@
 
 API do Habit Tracker em Laravel 13.
 
+## Arquitetura do projeto
+
+Uma requisição percorre as camadas nesta ordem: **rota → controlador → serviço → model → banco**.
+
+| Parte | Pasta | O que é |
+|---|---|---|
+| Routes | `routes/api.php` | Define os endpoints da API (prefixo `/api`) e qual controlador atende cada um. |
+| Controlador | `app/Http/Controllers/Api` | Recebe a requisição, chama o serviço e devolve a resposta em JSON. |
+| Serviço | `app/Services` | Concentra as regras de negócio (ex.: marcar um hábito como feito, calcular sequências). |
+| Model | `app/Models` | Representa uma tabela do banco e seus relacionamentos (Eloquent). |
+| Migration | `database/migrations` | Cria e altera as tabelas do banco, versionando o esquema. |
+
+Outras pastas:
+
+- `tests/`: testes automatizados (PHPUnit).
+- `docs/`: documentação do projeto; `docs/config/skills` e `docs/config/mcp` guardam as configurações de skills e de servidores MCP dos agentes de IA.
+
 ## Docker
 
 > A configuração do Docker ainda será definida. Por enquanto, os comandos básicos:

@@ -31,12 +31,32 @@ Tests use PHPUnit (not Pest). Create them with `php artisan make:test XTest --ph
 
 `.env.example` targets **PostgreSQL** at `127.0.0.1:5433`, with database `habit_tracker` and user `laravel`/`secret`. The matching Postgres 17 service in `compose.yaml` is fully commented out, so the Docker setup isn't finished. A local `docker/postgres/data/` directory (root-owned, causes a harmless git permission warning) is left over from an earlier container.
 
-## Architecture notes
+## Architecture
 
-- API routes live in `routes/api.php` (served under `/api`); protect them with the `auth:sanctum` middleware. Sanctum's `personal_access_tokens` migration is already present, and `User` is the token holder.
-- `bootstrap/app.php` forces exceptions (including validation errors) to render as JSON for `api/*` routes and for requests that expect JSON.
-- The intended resource scaffolding, from the README: model with migration, factory and seeder (`make:model Habit -mfs`); an API controller under `App\Http\Controllers\Api` (`make:controller Api/HabitController --api --model=Habit`); Form Requests for validation (`make:request StoreHabitRequest`); and API Resources for responses (`make:resource HabitResource`).
-- Laravel Boost (dev dependency) provides an MCP server through `.mcp.json` (`php artisan boost:mcp`) with `search-docs`, `database-schema` and `database-query` tools. Use `search-docs` for version-specific Laravel 13 APIs.
+The API is layered. A request flows **route → Form Request → controller → service → model → database**, and the response goes back out through an API Resource. Keep each concern in its layer:
+
+| Layer | Location | Responsibility |
+|---|---|---|
+| Routes | `routes/api.php` | Endpoint definitions, served under `/api`. Group protected routes under `auth:sanctum`; prefer `Route::apiResource()` for CRUD. |
+| Form Requests | `app/Http/Requests` | Validation and authorization of input (`make:request StoreHabitRequest`). Controllers receive already-validated data via `$request->validated()`. |
+| Controllers | `app/Http/Controllers/Api` | Thin HTTP layer: take the validated request, call a service, return a Resource. No business logic or queries here. Scaffold with `make:controller Api/HabitController --api --model=Habit`. |
+| Services | `app/Services` | Business rules (e.g. checking a habit off for a day, computing streaks). Plain classes injected into controllers by the container. The folder doesn't exist yet; create it with the first service. |
+| Models | `app/Models` | Eloquent models: relationships, casts, scopes. Habit data is user-owned, so scope queries to the authenticated user. |
+| API Resources | `app/Http/Resources` | JSON shape of responses (`make:resource HabitResource`). Never return models directly. |
+| Migrations / factories / seeders | `database/` | Schema changes and test/dev data. Create together with the model via `make:model Habit -mfs`. |
+
+Cross-cutting behaviour:
+
+- Sanctum's `personal_access_tokens` migration is present, and `User` is the token holder.
+- `bootstrap/app.php` forces exceptions (including validation errors) to render as JSON for `api/*` routes and for requests that expect JSON, so controllers don't need to format errors.
+
+## Repository layout beyond Laravel defaults
+
+- `docs/`: project documentation.
+- `docs/config/skills/`: agent skill definitions shared by the team (currently empty).
+- `docs/config/mcp/`: MCP server configuration for agents (currently empty). The active MCP config is still `.mcp.json` at the repo root (Claude Code) and `opencode.json` (OpenCode).
+
+Laravel Boost (dev dependency) provides an MCP server through `.mcp.json` (`php artisan boost:mcp`) with `search-docs`, `database-schema` and `database-query` tools. Use `search-docs` for version-specific Laravel 13 APIs.
 
 ## Git conventions (from README)
 
