@@ -1,9 +1,5 @@
 # Habit Tracker — Modelo ER
 
-Modelo lógico (PostgreSQL) do Habit Tracker, convertido de [[Habit Tracker - Modelo ER.canvas]].
-
-**Convenções:** PK das entidades = `id` (int, increment) · FKs = `fk_id_<tabela>` · tabelas associativas (`objetivo_usuario`, `usuario_insignia`, `config_notificacao`) têm PK composta pelas FKs.
-
 ```mermaid
 erDiagram
     insignia {
