@@ -2,6 +2,18 @@
 
 API do Habit Tracker em Laravel 13.
 
+## Primeiros passos
+
+Copie o `.env.example` para `.env`, defina as variáveis que achar adequadas e, em seguida, siga estes passos:
+
+```bash
+composer install                    # instala as dependências (antes de qualquer outro comando)
+docker compose up -d db-database    # desenvolvimento: sobe só o banco de dados
+php artisan key:generate            # gera a chave da aplicação
+php artisan migrate                 # roda as migrations
+php artisan serve                   # inicia o servidor
+```
+
 ## Arquitetura do projeto
 
 Uma requisição percorre as camadas nesta ordem: **rota → controlador → serviço → model → banco**.
@@ -59,9 +71,8 @@ Outras pastas:
 > A configuração do Docker ainda será definida. Por enquanto, os comandos básicos:
 
 ```bash
-docker compose up -d        # sobe os serviços em segundo plano
+docker compose up -d        # sobe os serviços em segundo plano (não rode)
 docker compose ps           # lista os serviços e o status
-docker compose logs -f      # acompanha os logs
 docker compose stop         # para os serviços
 docker compose down         # remove os contêineres
 ```

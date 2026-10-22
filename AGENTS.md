@@ -24,9 +24,9 @@ O `phpunit.xml` força SQLite em memória, então os testes nunca tocam no Postg
 
 ## Banco de dados
 
-- O `.env.example` indica Postgres em `127.0.0.1:5433`, mas o `.env` real usa **porta 5455, banco `public`, usuário `admin_system`**: confie no `.env`.
-- O serviço Postgres no `compose.yaml` está todo comentado; o setup com Docker não está pronto. `docker compose up` não faz nada. O Postgres precisa já estar rodando localmente.
-- `docker/postgres/data/` é uma sobra de propriedade do root e causa um aviso de permissão inofensivo no git: ignore.
+- O `.env.example` indica Postgres em `127.0.0.1:5433`, mas o `.env` local pode ter outros valores: confie no `.env`.
+- O `docker-compose.yaml` tem o serviço `db-database` (Postgres 17, porta `DB_PORT`, padrão 5433) e o `app` (`Dockerfile` + nginx, porta `APP_PORT`, padrão 8080), ambos lendo as variáveis `DB_*` do `.env`. No desenvolvimento, suba só o banco: `docker compose up -d db-database`.
+- `docker/postgres/data/` é uma sobra de um container antigo e está no `.gitignore`: ignore.
 
 ## Arquitetura
 
@@ -68,7 +68,7 @@ Regras:
 - Os nomes de pastas, classes e rotas seguem as convenções do Laravel, em inglês. As tabelas de `docs/DER.md` estão em português e são mapeadas para esses models (ex.: `habito` → `Habit`).
 - O MOD8 também usa `app/Notifications` e `app/Jobs`, com o agendamento em `routes/console.php`.
 
-Estado atual: nenhum desses módulos foi construído. Só existe `User`, e `routes/api.php` tem apenas o `GET /api/user` padrão. As pastas por módulo ainda não existem: crie-as junto com o primeiro arquivo de cada uma, ex.: `make:model Habit -mfs`, `make:controller Api/Habits/HabitController --api --model=Habit`, `make:request Habits/StoreHabitRequest`, `make:resource Habits/HabitResource`.
+Estado atual: nenhum desses módulos foi construído. Só existe `User` e um `Api/AuthController.php` **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum). Ao implementar o MOD1, substitua o mock e mova-o para `Api/Auth/`, com as rotas em `routes/api/auth.php`. As pastas por módulo ainda não existem: crie-as junto com o primeiro arquivo de cada uma, ex.: `make:model Habit -mfs`, `make:controller Api/Habits/HabitController --api --model=Habit`, `make:request Habits/StoreHabitRequest`, `make:resource Habits/HabitResource`.
 
 ## Documentação
 

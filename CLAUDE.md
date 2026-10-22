@@ -10,7 +10,9 @@ A linguagem padrão do projeto é o **português**: documentação, mensagens de
 
 Back-end de um habit tracker personalizado: uma API somente JSON feita com Laravel 13 (PHP ^8.3) e autenticada com Laravel Sanctum. Não há front-end web neste repositório; `resources/` e o Vite são sobras intocadas do esqueleto.
 
-**Estado atual:** a `main` contém um esqueleto Laravel recém-criado (mergeado no PR #3, vindo de `criando-projeto`). O único model de domínio é `User`; ainda não existem models, controllers, requests ou resources de hábitos, e `routes/api.php` tem apenas o `GET /api/user` padrão. O domínio de hábitos será construído do zero.
+**Estado atual:** o esqueleto Laravel (PR #3) recebeu o setup com Docker e um `AuthController` (PR #4). O único model de domínio é `User`; ainda não existem models, controllers, requests ou resources de hábitos, e o domínio de hábitos será construído do zero.
+
+O `app/Http/Controllers/Api/AuthController.php` é um **mock temporário**: `POST /api/login` aceita só credenciais fixas no código e `POST /api/refresh` devolve tokens estáticos (`accessToken`/`refreshToken`), sem Sanctum nem banco. O `GET /api/user` padrão continua protegido por `auth:sanctum`, então os tokens do mock não funcionam nele. O MOD1 deve substituir esse mock por autenticação real.
 
 ## Objetivo do projeto na disciplina
 
@@ -27,6 +29,7 @@ Ao trabalhar aqui, siga como fontes de verdade:
 ```bash
 composer setup                     # instala dependências, copia o .env, key:generate, migrate, npm install + build
 composer dev                       # roda `php artisan dev` (servidor, fila, logs, vite)
+docker compose up -d db-database   # sobe só o Postgres para desenvolvimento
 php artisan serve                  # só a API, em http://localhost:8000
 composer test                      # config:clear + php artisan test
 php artisan test --compact
@@ -41,7 +44,12 @@ Os testes usam PHPUnit (não Pest). Crie-os com `php artisan make:test Habits/Ha
 
 ## Banco de dados
 
-O `.env.example` aponta para **PostgreSQL** em `127.0.0.1:5433`, com o banco `habit_tracker` e o usuário `laravel`/`secret`. O serviço Postgres 17 correspondente no `compose.yaml` está todo comentado, então o setup com Docker não está pronto. Um diretório local `docker/postgres/data/` (de propriedade do root, causa um aviso de permissão inofensivo no git) sobrou de um container anterior.
+O `.env.example` aponta para **PostgreSQL** em `127.0.0.1:5433`, com o banco `habit_tracker` e o usuário `laravel`/`secret`. O `docker-compose.yaml` tem dois serviços, que leem as variáveis `DB_*` do `.env`:
+
+- `db-database`: Postgres 17, exposto na porta `DB_PORT` (padrão 5433), com os dados em um volume nomeado.
+- `app`: a aplicação (`Dockerfile` + `nginx.conf`), exposta na porta `APP_PORT` (padrão 8080).
+
+No desenvolvimento, suba só o banco com `docker compose up -d db-database` e rode a API com `php artisan serve`. O diretório `docker/postgres/data/` é uma sobra de um container antigo e está no `.gitignore`.
 
 ## Arquitetura
 
@@ -79,6 +87,7 @@ O código é organizado em 8 módulos. `<Modulo>` nas pastas acima é o nome da 
 | MOD8 · Onboarding e Notificações | `Onboarding` e `Notifications` | `/api/onboarding` e `/api/notifications` | `routes/api/onboarding.php` e `routes/api/notifications.php` |
 
 - Todas as rotas ficam em `auth:sanctum`, exceto cadastro e login do MOD1.
+- O `AuthController` mock ainda está fora dessa estrutura (`Api/AuthController.php`, rotas `/api/login` e `/api/refresh` sem prefixo). Ao implementar o MOD1, mova-o para `Api/Auth/` e as rotas para `routes/api/auth.php`, sob `/api/auth`.
 - As tabelas de `docs/DER.md` estão em português e são mapeadas para models em inglês (ex.: `habito` → `Habit`, `registro_habito` → `CheckIn`). O `usuario` do DER corresponde ao `User` que já existe.
 - O MOD8 está separado dos demais (é a seção 7 do escopo) e ainda não tem issues no Linear. Além das pastas do módulo, ele usa `app/Notifications` e `app/Jobs`, com o agendamento em `routes/console.php`.
 - A ordem de desenvolvimento segue a numeração, porque cada módulo depende dos anteriores.

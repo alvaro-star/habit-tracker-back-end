@@ -25,6 +25,7 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+/docker/postgres/data
 
 # Requisitos funcionais (arquivo local)
 RF.md
