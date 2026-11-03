@@ -11,3 +11,5 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 Route::post('/refresh', [AuthController::class, 'refresh']);
+
+require __DIR__.'/api/statistics.php';
