@@ -2,9 +2,9 @@
 
 namespace Tests\Feature\Statistics;
 
-use App\Models\Category;
-use App\Models\Habit;
-use App\Models\HabitRecord;
+use App\Models\Categoria;
+use App\Models\Habito;
+use App\Models\RegistroHabito;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -25,15 +25,15 @@ class StatisticTest extends TestCase
 
     public function test_can_get_consistency_matrix(): void
     {
-        $category = Category::create(['nome' => 'Saúde']);
-        $habit = Habit::create([
+        $category = Categoria::create(['nome' => 'Saúde']);
+        $habit = Habito::create([
             'fk_id_usuario' => $this->user->id,
             'fk_id_categoria' => $category->id,
             'nome' => 'Beber água',
             'valor_meta' => 2000,
         ]);
 
-        HabitRecord::create([
+        RegistroHabito::create([
             'fk_id_habito' => $habit->id,
             'data' => now()->toDateString(),
             'status' => 'CONCLUIDO',

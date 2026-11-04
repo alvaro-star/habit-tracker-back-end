@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class HabitRecord extends Model
+class RegistroHabito extends Model
 {
     protected $table = 'registro_habito';
 
@@ -19,8 +19,8 @@ class HabitRecord extends Model
         'percentual',
     ];
 
-    public function habit(): BelongsTo
+    public function habito(): BelongsTo
     {
-        return $this->belongsTo(Habit::class, 'fk_id_habito');
+        return $this->belongsTo(Habito::class, 'fk_id_habito');
     }
 }
