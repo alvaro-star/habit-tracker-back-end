@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Habit extends Model
+class Habito extends Model
 {
     protected $table = 'habito';
 
@@ -28,13 +28,13 @@ class Habit extends Model
         'ativo',
     ];
 
-    public function category(): BelongsTo
+    public function categoria(): BelongsTo
     {
-        return $this->belongsTo(Category::class, 'fk_id_categoria');
+        return $this->belongsTo(Categoria::class, 'fk_id_categoria');
     }
 
-    public function records(): HasMany
+    public function registros(): HasMany
     {
-        return $this->hasMany(HabitRecord::class, 'fk_id_habito');
+        return $this->hasMany(RegistroHabito::class, 'fk_id_habito');
     }
 }
