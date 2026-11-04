@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Category extends Model
+class Categoria extends Model
 {
     protected $table = 'categoria';
 
@@ -13,8 +13,8 @@ class Category extends Model
 
     protected $fillable = ['nome'];
 
-    public function habits(): HasMany
+    public function habitos(): HasMany
     {
-        return $this->hasMany(Habit::class, 'fk_id_categoria');
+        return $this->hasMany(Habito::class, 'fk_id_categoria');
     }
 }
