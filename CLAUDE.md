@@ -10,7 +10,7 @@ A linguagem padrão do projeto é o **português**: documentação, mensagens de
 
 Back-end de um habit tracker personalizado: uma API somente JSON feita com Laravel 13 (PHP ^8.3) e autenticada com Laravel Sanctum. Não há front-end web neste repositório; `resources/` e o Vite são sobras intocadas do esqueleto.
 
-**Estado atual:** o esqueleto Laravel (PR #3) recebeu o setup com Docker e um `AuthController` (PR #4). O único model de domínio é `User`; ainda não existem models, controllers, requests ou resources de hábitos, e o domínio de hábitos será construído do zero.
+**Estado atual:** os models, migrations, repositories e services de todas as tabelas do DER existem (MOD0), e cada service tem um controller com CRUD exposto em `apiResource` no prefixo do seu módulo. As estatísticas (MOD7) têm endpoints próprios. Ainda faltam as regras de negócio de cada módulo (cálculo de XP, evolução do dragão, onboarding etc.) e a autenticação real. Todas as rotas estão documentadas no Swagger (Scramble) em `/docs/api`.
 
 O `app/Http/Controllers/Api/AuthController.php` é um **mock temporário**: `POST /api/login` aceita só credenciais fixas no código e `POST /api/refresh` devolve tokens estáticos (`accessToken`/`refreshToken`), sem Sanctum nem banco. O `GET /api/user` padrão continua protegido por `auth:sanctum`, então os tokens do mock não funcionam nele. O MOD1 deve substituir esse mock por autenticação real.
 
@@ -53,14 +53,16 @@ No desenvolvimento, suba só o banco com `docker compose up -d db-database` e ro
 
 ## Arquitetura
 
-A API é dividida em camadas. Uma requisição percorre **rota → Form Request → controller → service → model → banco de dados**, e a resposta volta por um API Resource. Mantenha cada responsabilidade na sua camada:
+A API é dividida em camadas. Uma requisição percorre **rota → Form Request → DTO → controller → service → repository → model → banco de dados**, e a resposta volta por um API Resource. Mantenha cada responsabilidade na sua camada:
 
 | Camada | Local | Responsabilidade |
 |---|---|---|
-| Rotas | `routes/api/<modulo>.php` | Definição dos endpoints, servidos sob `/api` com o prefixo do módulo. O `routes/api.php` só carrega esses arquivos. Agrupe as rotas protegidas em `auth:sanctum`; prefira `Route::apiResource()` para CRUD. |
-| Form Requests | `app/Http/Requests/<Modulo>` | Validação e autorização da entrada (`make:request Habits/StoreHabitRequest`). Os controllers recebem os dados já validados via `$request->validated()`. |
-| Controllers | `app/Http/Controllers/Api/<Modulo>` | Camada HTTP fina: recebe a requisição validada, chama um service e devolve um Resource. Sem regra de negócio nem queries aqui. Crie com `make:controller Api/Habits/HabitController --api --model=Habit`. |
-| Services | `app/Services/<Modulo>` | Regras de negócio (ex.: marcar um hábito como feito em um dia, calcular sequências). Classes simples injetadas nos controllers pelo container. A pasta ainda não existe; crie-a junto com o primeiro service. |
+| Rotas | `routes/api/<modulo>.php` | Definição dos endpoints, servidos sob `/api` com o prefixo do módulo. O `routes/api.php` só carrega esses arquivos. Agrupe as rotas protegidas em `auth:sanctum` e use `Route::apiResource()` com o parâmetro `{id}` (`->parameters(['habits' => 'id'])`), que o `Route::pattern` do `routes/api.php` restringe a números. |
+| Form Requests | `app/Http/Requests/<Modulo>` | Validação da entrada. Há uma request por entidade (ex.: `Habits/HabitoRequest`), que estende `App\Http\Requests\ApiRequest`: o `$this->obrigatorio()` devolve `required` no POST e `sometimes` no PUT/PATCH, então a mesma request atende criação e edição parcial. Cada request implementa `toDto()`, que cria o DTO a partir de `$this->validated()`, e leva `@ignoreSchema` no docblock para o Swagger documentar POST e PUT separadamente. |
+| DTOs | `app/DTOs/<Modulo>` | Objetos PHP imutáveis (`final readonly class`, estendem `App\DTOs\DTO`) que representam os dados vindos da requisição, já com os tipos do PHP: inteiros, `float`, `bool`, enums de `app/Enums` e datas em `CarbonImmutable`. São criados por `XxxDTO::fromArray()` (chamado pelo `toDto()` da request) e convertidos de volta para as colunas do banco por `toArray()`, que descarta os campos `null`. Por isso um PATCH não consegue limpar um campo opcional enviando `null`. |
+| Controllers | `app/Http/Controllers/Api/<Modulo>` | Camada HTTP fina, um controller por service: recebe a request, passa `$request->toDto()` ao service e devolve um Resource. Sem regra de negócio nem queries aqui. |
+| Services | `app/Services` | Regras de negócio (ex.: o peso padrão por dificuldade em `HabitoService`). Estendem `BaseService`, que oferece o CRUD (`listar`, `buscar`, `criar`, `atualizar`, `excluir`) e as variantes restritas ao usuário (`listarDoUsuario`, `criarParaUsuario` etc.). Aceitam um DTO ou um array. |
+| Repositories | `app/Repositories` | Queries Eloquent, uma classe por model, estendendo `BaseRepository`. O `consultaDoUsuario()` filtra os dados pessoais pela coluna `fk_id_usuario`; tabelas sem essa coluna (`registro_habito`, `escolha_elemento`) o sobrescrevem para chegar ao dono pelo relacionamento. |
 | Models | `app/Models` | Models Eloquent: relacionamentos, casts, scopes. Ficam todos juntos, sem subpastas, porque vários módulos usam os mesmos models. Os dados de hábitos pertencem ao usuário, então filtre as queries pelo usuário autenticado. |
 | API Resources | `app/Http/Resources/<Modulo>` | Formato JSON das respostas (`make:resource Habits/HabitResource`). Nunca devolva models diretamente. |
 | Migrations / factories / seeders | `database/` | Mudanças de schema e dados de teste/desenvolvimento, nas pastas padrão, sem subpastas. Crie junto com o model via `make:model Habit -mfs`. |
@@ -70,6 +72,8 @@ Comportamentos transversais:
 
 - A migration `personal_access_tokens` do Sanctum já existe, e `User` é o dono dos tokens.
 - O `bootstrap/app.php` força as exceções (inclusive erros de validação) a serem renderizadas como JSON nas rotas `api/*` e nas requisições que esperam JSON, então os controllers não precisam formatar erros.
+- Dados pessoais (hábitos, check-ins, dragões, XP diário, escolhas de elemento) só são vistos pelo dono: um id de outro usuário devolve 404. Quando um registro aponta para outro dado pessoal (ex.: o `fk_id_habito` de um check-in), a request valida a posse com `Rule::exists(...)->where('fk_id_usuario', $this->user()?->id)` e devolve 422. As demais tabelas (categorias, modelos, níveis, insígnias, ovos, estágios, elementos, gatilhos) são catálogos, com CRUD liberado a qualquer usuário autenticado, porque ainda não existe papel de administrador.
+- Resources de tabelas com uma coluna chamada `data` (`RegistroHabitoResource`, `XpDiarioResource`) declaram `public static bool $forceWrapping = true`, senão o Laravel confunde a coluna com o envelope `{"data": ...}` e não embrulha a resposta.
 
 ## Módulos
 

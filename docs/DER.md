@@ -19,7 +19,7 @@ erDiagram
         int maior_streak "NOT NULL"
         timestamp ultimo_acesso "NOT NULL"
         boolean onboarding_concluido "NOT NULL"
-        timestamp data_cadastro "NOT NULL"
+        timestamp created_at "NOT NULL"
     }
     config_notificacao {
         int fk_id_usuario PK, FK "→ usuario"
@@ -123,6 +123,7 @@ erDiagram
         polaridade polaridade "NOT NULL"
         tipo_meta tipo_meta "NOT NULL"
         frequencia frequencia "NOT NULL"
+        varchar(3) dia_frequencia
         decimal valor_meta "(10,2)"
         varchar(20) unidade
         dificuldade dificuldade "NOT NULL"
@@ -130,7 +131,7 @@ erDiagram
         time horario_lembrete
         timestamp inicio_abstinencia
         boolean ativo "NOT NULL"
-        timestamp data_criacao "NOT NULL"
+        timestamp created_at "NOT NULL"
     }
 
     nivel ||--o{ usuario : "fk_id_nivel"
@@ -166,3 +167,6 @@ erDiagram
 | `status_registro` | `CONCLUIDO`, `EM_ANDAMENTO`, `NAO_CONCLUIDO` |
 | `status_dragao` | `ATIVO`, `SANTUARIO` |
 | `canal_notificacao` | `PUSH`, `IN_APP` |
+| `dia_semana` | `SEG`, `TER`, `QUA`, `QUI`, `SEX`, `SAB`, `DOM` |
+
+O `habito.dia_frequencia` depende da `frequencia`: é `null` no `DIARIA`, um `dia_semana` no `SEMANAL` e um dia do mês de `1` a `31` no `MENSAL`. Um hábito mensal num dia que o mês não tem (ex.: 31 em abril) não aparece naquele mês. A API exige os dois campos juntos: quem envia a `frequencia` envia também o `dia_frequencia`, e vice-versa.
