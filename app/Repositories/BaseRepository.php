@@ -16,6 +16,16 @@ abstract class BaseRepository
         return $this->model::query();
     }
 
+    /**
+     * Consulta restrita aos registros de um usuário. O padrão filtra pela
+     * coluna fk_id_usuario; repositories de tabelas sem essa coluna
+     * sobrescrevem o método para chegar ao dono por um relacionamento.
+     */
+    protected function consultaDoUsuario(int $usuarioId): Builder
+    {
+        return $this->consulta()->where('fk_id_usuario', $usuarioId);
+    }
+
     /** @return Collection<int, Model> */
     public function todos(): Collection
     {
@@ -27,10 +37,22 @@ abstract class BaseRepository
         return $this->consulta()->findOrFail($id);
     }
 
+    /** @return Collection<int, Model> */
+    public function doUsuario(int $usuarioId): Collection
+    {
+        return $this->consultaDoUsuario($usuarioId)->get();
+    }
+
+    public function buscarDoUsuarioOuFalhar(int $usuarioId, int|string $id): Model
+    {
+        return $this->consultaDoUsuario($usuarioId)->findOrFail($id);
+    }
+
     /** @param array<string, mixed> $dados */
     public function criar(array $dados): Model
     {
-        return $this->consulta()->create($dados);
+        // refresh() traz os defaults do banco (ex.: percentual, ativo) que o create não devolve.
+        return $this->consulta()->create($dados)->refresh();
     }
 
     /** @param array<string, mixed> $dados */
