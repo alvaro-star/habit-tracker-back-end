@@ -167,7 +167,7 @@ class CrudServicosTest extends TestCase
             'polaridade' => 'BOM',
             'tipo_meta' => 'REALIZACAO',
             'frequencia' => 'DIARIA',
-            'dificuldade' => 'FACIL',
+            'peso' => 5,
             'ativo' => true,
         ], ['nome' => 'Ler dez páginas'], 'nome');
     }
@@ -183,7 +183,7 @@ class CrudServicosTest extends TestCase
             'polaridade' => 'BOM',
             'tipo_meta' => 'REALIZACAO',
             'frequencia' => 'DIARIA',
-            'dificuldade' => 'FACIL',
+            'peso' => 5,
             'ativo' => true,
         ]);
 
