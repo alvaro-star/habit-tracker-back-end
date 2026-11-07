@@ -10,7 +10,7 @@ erDiagram
     }
     usuario {
         int id PK "increment"
-        int fk_id_nivel FK "NOT NULL · → nivel"
+        int fk_id_dragao FK "→ dragao (dragão ativo)"
         varchar(80) nome "NOT NULL"
         varchar(120) email UK "NOT NULL"
         varchar(255) senha_hash "NOT NULL"
@@ -78,11 +78,6 @@ erDiagram
         varchar(40) nome "NOT NULL"
         varchar(255) imagem_url "NOT NULL"
     }
-    nivel {
-        int id PK "increment"
-        int xp_necessario "NOT NULL"
-        int xp_acumulado "NOT NULL"
-    }
     habito_modelo {
         int id PK "increment"
         int fk_id_categoria FK "NOT NULL · → categoria"
@@ -131,10 +126,10 @@ erDiagram
         time horario_lembrete
         timestamp inicio_abstinencia
         boolean ativo "NOT NULL"
+        timestamp inactivated_at "quando foi desativado"
         timestamp created_at "NOT NULL"
     }
 
-    nivel ||--o{ usuario : "fk_id_nivel"
     usuario ||--o{ objetivo_usuario : "fk_id_usuario"
     categoria ||--o{ objetivo_usuario : "fk_id_categoria"
     categoria ||--o{ habito_modelo : "fk_id_categoria"
@@ -144,6 +139,7 @@ erDiagram
     habito ||--o{ registro_habito : "fk_id_habito"
     usuario ||--o{ xp_diario : "fk_id_usuario"
     dragao ||--o{ xp_diario : "fk_id_dragao"
+    dragao |o--o| usuario : "fk_id_dragao (ativo)"
     usuario ||--o{ dragao : "fk_id_usuario"
     ovo ||--o{ dragao : "fk_id_ovo"
     estagio ||--o{ dragao : "fk_id_estagio"
@@ -168,5 +164,13 @@ erDiagram
 | `status_dragao` | `ATIVO`, `SANTUARIO` |
 | `canal_notificacao` | `PUSH`, `IN_APP` |
 | `dia_semana` | `SEG`, `TER`, `QUA`, `QUI`, `SEX`, `SAB`, `DOM` |
+
+Um usuário pode ter vários dragões (os do Santuário, com status `SANTUARIO`), mas só um `ATIVO`, apontado por `usuario.fk_id_dragao` (null quando não há dragão ativo).
+
+A tabela `registro_habito` tem um índice composto em (`fk_id_habito`, `data`): o check-in de um hábito num dia é buscado por esse par, e o POST da API marca (cria ou atualiza) ou desmarca (exclui) esse registro.
+
+A tabela `xp_diario` é o histórico do XP de cada dia (um registro por usuário e dia, com o dragão do ciclo). Ela é gravada pelo sistema, não pelo usuário: o registro do dia é recalculado a cada check-in marcado ou desmarcado e, no caso de hoje, também quando um hábito é criado ou desativado. A API só a lista.
+
+O nível do usuário (1 a 30) não tem tabela nem coluna: é calculado pelo `NivelService` a partir do `usuario.xp_vitalicio`, com os intervalos gerados por `config/progression.php` (nível 1 em 0 XP, passos ~10% maiores e nível 30 em 9.000 XP).
 
 O `habito.dia_frequencia` depende da `frequencia`: é `null` no `DIARIA`, um `dia_semana` no `SEMANAL` e um dia do mês de `1` a `31` no `MENSAL`. Um hábito mensal num dia que o mês não tem (ex.: 31 em abril) não aparece naquele mês. A API exige os dois campos juntos: quem envia a `frequencia` envia também o `dia_frequencia`, e vice-versa.
