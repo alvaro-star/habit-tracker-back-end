@@ -22,7 +22,7 @@ class HabitoApiTest extends TestCase
             'tipo_meta' => 'REALIZACAO',
             'frequencia' => 'DIARIA',
             'dia_frequencia' => null,
-            'dificuldade' => 'FACIL',
+            'peso' => 5,
         ], $extra);
     }
 
@@ -32,17 +32,65 @@ class HabitoApiTest extends TestCase
         $this->postJson('/api/habits', $this->payload())->assertUnauthorized();
     }
 
-    public function test_cria_habito_do_usuario_autenticado_com_peso_da_dificuldade(): void
+    public function test_cria_habito_do_usuario_autenticado_com_dificuldade_do_peso(): void
     {
         $usuario = User::factory()->create();
         Sanctum::actingAs($usuario);
 
-        $this->postJson('/api/habits', $this->payload(['dificuldade' => 'DIFICIL']))
+        $this->postJson('/api/habits', $this->payload(['peso' => 12]))
             ->assertCreated()
             ->assertJsonPath('data.nome', 'Beber agua')
-            ->assertJsonPath('data.peso', 15);
+            ->assertJsonPath('data.peso', 12)
+            ->assertJsonPath('data.dificuldade', 'DIFICIL');
 
-        $this->assertDatabaseHas('habito', ['fk_id_usuario' => $usuario->id, 'nome' => 'Beber agua', 'peso' => 15]);
+        $this->assertDatabaseHas('habito', ['fk_id_usuario' => $usuario->id, 'peso' => 12, 'dificuldade' => 'DIFICIL']);
+    }
+
+    /** @return array<string, array{0: int, 1: string}> */
+    public static function pesosEDificuldades(): array
+    {
+        return [
+            'peso 1' => [1, 'FACIL'],
+            'peso 5' => [5, 'FACIL'],
+            'peso 6' => [6, 'MEDIO'],
+            'peso 10' => [10, 'MEDIO'],
+            'peso 11' => [11, 'DIFICIL'],
+            'peso 15' => [15, 'DIFICIL'],
+            'peso 16' => [16, 'MUITO_DIFICIL'],
+            'peso 20' => [20, 'MUITO_DIFICIL'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('pesosEDificuldades')]
+    public function test_o_peso_define_a_dificuldade(int $peso, string $dificuldade): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->postJson('/api/habits', $this->payload(['peso' => $peso]))
+            ->assertCreated()
+            ->assertJsonPath('data.dificuldade', $dificuldade);
+    }
+
+    /** @return array<string, array{0: mixed}> */
+    public static function pesosInvalidos(): array
+    {
+        return [
+            'acima de 20' => [21],
+            'zero' => [0],
+            'negativo' => [-5],
+            'decimal' => [7.5],
+            'texto' => ['pesado'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('pesosInvalidos')]
+    public function test_recusa_peso_fora_de_1_a_20(mixed $peso): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->postJson('/api/habits', $this->payload(['peso' => $peso]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['peso']);
     }
 
     public function test_valida_campos_obrigatorios_e_enums(): void
@@ -51,7 +99,19 @@ class HabitoApiTest extends TestCase
 
         $this->postJson('/api/habits', ['polaridade' => 'INVALIDA'])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['fk_id_categoria', 'nome', 'polaridade', 'tipo_meta', 'frequencia', 'dificuldade']);
+            ->assertJsonValidationErrors(['fk_id_categoria', 'nome', 'polaridade', 'tipo_meta', 'frequencia', 'peso']);
+    }
+
+    public function test_service_recusa_peso_acima_de_20_sem_passar_pela_request(): void
+    {
+        $this->expectException(\App\Exceptions\RegraDeNegocioException::class);
+
+        app(\App\Services\HabitoService::class)->criar([
+            'fk_id_usuario' => User::factory()->create()->id,
+            'fk_id_categoria' => Categoria::create(['nome' => 'Geral'])->id,
+            'nome' => 'Ler',
+            'peso' => 30,
+        ]);
     }
 
     public function test_lista_apenas_habitos_do_usuario(): void
@@ -88,7 +148,7 @@ class HabitoApiTest extends TestCase
         $this->assertDatabaseHas('habito', ['id' => $habito->id, 'nome' => 'Alheio']);
     }
 
-    public function test_atualiza_habito_recalculando_peso_pela_dificuldade(): void
+    public function test_atualiza_habito_recalculando_a_dificuldade_pelo_peso(): void
     {
         $usuario = User::factory()->create();
         $habito = Habito::create([
@@ -98,36 +158,41 @@ class HabitoApiTest extends TestCase
         ]);
         Sanctum::actingAs($usuario);
 
-        $this->putJson("/api/habits/{$habito->id}", ['dificuldade' => 'MUITO_DIFICIL'])
+        $this->putJson("/api/habits/{$habito->id}", ['peso' => 18])
             ->assertOk()
-            ->assertJsonPath('data.dificuldade', 'MUITO_DIFICIL')
-            ->assertJsonPath('data.peso', 20);
+            ->assertJsonPath('data.peso', 18)
+            ->assertJsonPath('data.dificuldade', 'MUITO_DIFICIL');
+
+        $this->putJson("/api/habits/{$habito->id}", ['peso' => 25])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['peso']);
     }
 
-    public function test_post_ignora_peso_e_created_at_informados(): void
+    public function test_post_ignora_dificuldade_e_created_at_informados(): void
     {
         $usuario = User::factory()->create();
         Sanctum::actingAs($usuario);
 
         $resposta = $this->postJson('/api/habits', $this->payload([
-            'dificuldade' => 'MEDIO',
-            'peso' => 1,
+            'peso' => 8,
+            'dificuldade' => 'MUITO_DIFICIL',
             'created_at' => '2020-01-01 00:00:00',
-        ]))->assertCreated()->assertJsonPath('data.peso', 10);
+        ]))->assertCreated()->assertJsonPath('data.dificuldade', 'MEDIO');
 
         $this->assertNotNull($resposta->json('data.created_at'));
         $this->assertStringStartsNotWith('2020-01-01', $resposta->json('data.created_at'));
     }
 
-    public function test_put_nao_altera_peso_nem_created_at(): void
+    public function test_put_nao_altera_dificuldade_nem_created_at(): void
     {
         $usuario = User::factory()->create();
         Sanctum::actingAs($usuario);
-        $habito = $this->postJson('/api/habits', $this->payload(['dificuldade' => 'DIFICIL']))->json('data');
+        $habito = $this->postJson('/api/habits', $this->payload(['peso' => 15]))->json('data');
 
-        $this->putJson("/api/habits/{$habito['id']}", ['peso' => 1, 'created_at' => '2020-01-01 00:00:00'])
+        $this->putJson("/api/habits/{$habito['id']}", ['dificuldade' => 'FACIL', 'created_at' => '2020-01-01 00:00:00'])
             ->assertOk()
             ->assertJsonPath('data.peso', 15)
+            ->assertJsonPath('data.dificuldade', 'DIFICIL')
             ->assertJsonPath('data.created_at', $habito['created_at']);
     }
 
