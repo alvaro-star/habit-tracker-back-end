@@ -37,7 +37,7 @@ class HabitoRequest extends ApiRequest
             'dia_frequencia' => ['nullable', new DiaFrequenciaValido],
             'valor_meta' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'unidade' => ['nullable', 'string', 'max:20'],
-            'dificuldade' => [$obrigatorio, Rule::enum(Dificuldade::class)],
+            'peso' => [$obrigatorio, 'integer', 'min:'.Dificuldade::PESO_MINIMO, 'max:'.Dificuldade::PESO_MAXIMO],
             'ativo' => ['sometimes', 'boolean'],
         ];
     }
