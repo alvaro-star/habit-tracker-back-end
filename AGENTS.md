@@ -42,17 +42,25 @@ Os **DTOs** (`app/DTOs/<Modulo>`, `final readonly class` que estende `App\DTOs\D
 
 O `bootstrap/app.php` já renderiza todas as exceções (inclusive erros de validação) como JSON em `api/*`: não adicione formatação de erros nos controllers.
 
-Cada regra de negócio fica no service do módulo dono dela (ex.: a dificuldade gerada pelo peso em `HabitoService`, o XP do dia em `XpDiarioService`); um service pode usar outro service ou repository para ler dados de outro módulo. Quando uma regra não pode ser validada só na Form Request (depende do registro salvo, ou o service é chamado sem request), lance `App\Exceptions\RegraDeNegocioException($campo, $mensagem)`: o `bootstrap/app.php` a converte em 422, no formato dos erros de validação. Regras de validação reutilizáveis ficam em `app/Rules`, e os parâmetros fixos do jogo em `config/` (ex.: `config/progression.php`, `teto_diario` = 25), não no `.env`.
+Cada regra de negócio fica no service do módulo dono dela (ex.: a dificuldade gerada pelo peso em `HabitoService`, o XP do dia em `XpDiarioService`); um service pode usar outro service ou repository para ler dados de outro módulo. Quando uma regra não pode ser validada só na Form Request (depende do registro salvo, ou o service é chamado sem request), lance `App\Exceptions\RegraDeNegocioException($campo, $mensagem, $status = 422)`: o `bootstrap/app.php` a converte no status da exceção (422 por padrão, ou outro como 409), no formato dos erros de validação. Regras de validação reutilizáveis ficam em `app/Rules`, e os parâmetros fixos do jogo em `config/` (ex.: `config/progression.php`, `teto_diario` = 25), não no `.env`.
 
 O Swagger (Scramble) usa o docblock do método do controller como descrição do endpoint e o comentário `/** ... */` acima de cada regra da Form Request como descrição do campo.
 
 ## Regras de negócio implementadas
 
 - **Peso e dificuldade:** o usuário envia o `peso` (inteiro de 1 a 20), e a `dificuldade` vem de `Dificuldade::doPeso()`: 1–5 `FACIL`, 6–10 `MEDIO`, 11–15 `DIFICIL`, 16–20 `MUITO_DIFICIL`. Uma `dificuldade` enviada é descartada.
+- **Data de criação e tipo de meta:** `created_at`/`data_criacao` não podem ser enviados no hábito (422; vêm do timestamp). O `tipo_meta` só muda enquanto o hábito não tem check-ins (senão, 422 pelo `HabitoService`).
+- **Exclusão de hábito:** o `DELETE /api/habits/{id}` só desativa (`ativo = false`, grava `inactivated_at`, mantém os check-ins, recalcula o XP de hoje) e só é permitido no dia em que o hábito foi criado (antes disso, 422). PATCH `ativo: false` grava o `inactivated_at`; `ativo: true` o limpa.
+- **TODO:** o XP diário e o progresso das estatísticas ainda filtram por `ativo = true`; os TODOs no `HabitoRepository`, `XpDiarioService` e `StatisticService` pedem para usar o `inactivated_at`.
 - **Frequência:** `habito.dia_frequencia` é `null` no `DIARIA`, `SEG`…`DOM` (`DiaSemana`) no `SEMANAL` e `1`…`31` no `MENSAL`. A `frequencia` e o `dia_frequencia` são sempre enviados juntos; a combinação é validada por `DiaFrequenciaValido` e `HabitoService::validarFrequencia()`.
 - **Hábitos do dia:** `GET /api/habits/daily?data=AAAA-MM-DD` (`HabitoService::habitosDiarios()`) lista os hábitos ativos da data. Uma data inexistente devolve 422, e um hábito mensal dos dias 29 a 31 só aparece nos meses que têm esse dia.
-- **XP do dia:** `XpDiarioService::xpDoDia()` aplica `(∑W cumpridos / ∑W total) × teto_diario`, com `pesoRealizadoDoDia()` somando os check-ins `CONCLUIDO` (peso inteiro) e `EM_ANDAMENTO` (peso × percentual). Os hábitos semanais ficam fora (pool semanal, ainda não feito), e o XP ainda não é gravado nem somado ao `users.xp_vitalicio`.
+- **Check-in:** só `GET` e `POST` em `/api/check-ins`. O POST recebe `checked` (`true` cria/atualiza pelo par `fk_id_habito` + `data`; `false` exclui, 204). Data sem dragão ativo, anterior ao nascimento do dragão ou futura → 422; anterior à criação do hábito → 409. Em qualquer data (inclusive hoje), `XpDiarioService::recalcularDia()` regrava o `xp_diario` do dia e soma a diferença no `xp_ciclo` do dragão e no `xp_vitalicio`.
+- **XP do dia:** `XpDiarioService::xpDoDia()` calcula qualquer dia, só com hábitos ativos criados até a data que caem no dia (diários, semanais do dia da semana, mensais do dia do mês); não há pool semanal. `recalcularDia()` grava em `xp_diario` e soma a diferença no `xp_ciclo` do dragão ativo e no `xp_vitalicio`; `atualizarXpDeHoje($usuarioId)` faz isso para hoje e é chamado ao criar e ao desativar um hábito. O `XpDiarioService` usa o `HabitoRepository` (não o `HabitoService`) para evitar dependência circular.
+- **Histórico de XP:** `GET /api/progression/daily-xp?data_inicio=&data_fim=` é só leitura, exige o intervalo (`DataValida`) e busca tudo no banco, inclusive hoje; não calcula nada.
+- **Dragão ativo:** só um dragão `ATIVO` por usuário, guardado em `users.fk_id_dragao` pelo `DragaoService` (422 em `status` ao tentar um segundo ativo).
 - **XP vitalício:** `users.xp_vitalicio` (padrão 0) fica fora do `Fillable` do `User`.
+- **Níveis:** não há tabela de níveis. O `NivelService` calcula sem banco: `curva()` gera os intervalos dos 30 níveis de `config/progression.php` (nível 1 em 0 XP, passos ~10% maiores, nível 30 em 9.000 XP) e `nivelDoXp($xp)` devolve o nível. `User::getNivel()` o usa com o `xp_vitalicio`.
+- **Usuário logado:** `GET /api/user` (`Api/Auth/UsuarioController` + `UsuarioResource`) devolve o usuário com `xp_vitalicio`, `fk_id_dragao` e o `nivel` anexado na resposta.
 
 ## Módulos e estrutura de pastas
 
@@ -92,7 +100,7 @@ Regras:
 - O MOD7 foge do padrão: `app/Services/Statistics/StatisticService.php` não estende `BaseService`, e as rotas são endpoints próprios, não `apiResource`.
 - O MOD8 também usa `app/Notifications` e `app/Jobs`, com o agendamento em `routes/console.php`.
 
-Estado atual: todas as tabelas do DER têm model, repository e service, e cada service tem um controller com CRUD (`apiResource`, parâmetro `{id}`) no prefixo do seu módulo, documentado no Swagger em `/docs/api`. Já existem as regras listadas em "Regras de negócio implementadas"; faltam as demais (pool semanal, níveis, dragão, onboarding etc.) e a autenticação real: o `Api/AuthController.php` ainda é um **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum). Ao implementar o MOD1, substitua o mock e mova-o para `Api/Auth/`, com as rotas em `routes/api/auth.php`.
+Estado atual: todas as tabelas do DER têm model, repository e service, e cada service tem um controller com CRUD (`apiResource`, parâmetro `{id}`) no prefixo do seu módulo, documentado no Swagger em `/docs/api`. Já existem as regras listadas em "Regras de negócio implementadas"; faltam as demais (dragão, onboarding etc.) e a autenticação real: o `Api/AuthController.php` ainda é um **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum). Ao implementar o MOD1, substitua o mock e mova-o para `Api/Auth/`, com as rotas em `routes/api/auth.php`.
 
 ## Documentação
 
