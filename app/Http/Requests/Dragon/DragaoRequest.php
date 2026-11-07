@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Dragon;
 
 use App\DTOs\Dragon\DragaoDTO;
+use App\Enums\ElementoDragao;
 use App\Enums\StatusDragao;
 use App\Http\Requests\ApiRequest;
 use Illuminate\Validation\Rule;
@@ -18,9 +19,14 @@ class DragaoRequest extends ApiRequest
         $obrigatorio = $this->obrigatorio();
 
         return [
-            'fk_id_ovo' => [$obrigatorio, 'integer', 'exists:ovo,id'],
-            'fk_id_estagio' => [$obrigatorio, 'integer', 'exists:estagio,id'],
+            /**
+             * Elemento do dragão: FOGO, TERRA, AGUA ou AR (o cenário e a aparência ficam com o front-end).
+             * Obrigatório no PUT/PATCH quando o dragão tem 6.000 XP ou mais no ciclo e ainda não tem
+             * elemento. Cada troca é registrada na trajetória (escolha_elemento).
+             */
+            'elemento' => ['sometimes', 'nullable', Rule::enum(ElementoDragao::class)],
             'nome' => [$obrigatorio, 'string', 'max:40'],
+            /** XP do ciclo. Ele define o estágio do dragão (OVO, FILHOTE, JOVEM, ADULTO, ADULTO_FINAL), que não é enviado. */
             'xp_ciclo' => [$obrigatorio, 'integer', 'min:0'],
             'status' => [$obrigatorio, Rule::enum(StatusDragao::class)],
             'data_nascimento' => [$obrigatorio, 'date_format:Y-m-d'],

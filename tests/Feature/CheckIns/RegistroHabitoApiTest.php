@@ -4,9 +4,7 @@ namespace Tests\Feature\CheckIns;
 
 use App\Models\Categoria;
 use App\Models\Dragao;
-use App\Models\Estagio;
 use App\Models\Habito;
-use App\Models\Ovo;
 use App\Models\RegistroHabito;
 use App\Models\User;
 use App\Models\XpDiario;
@@ -41,8 +39,6 @@ class RegistroHabitoApiTest extends TestCase
     {
         $dragao = Dragao::create([
             'fk_id_usuario' => $usuario->id,
-            'fk_id_ovo' => Ovo::create(['nome' => 'Ovo', 'imagem_url' => 'ovo.png'])->id,
-            'fk_id_estagio' => Estagio::create(['nome' => 'Ovo', 'ordem' => 1, 'xp_marco' => 0])->id,
             'nome' => 'Smaug',
             'xp_ciclo' => 0,
             'status' => 'ATIVO',
@@ -53,8 +49,13 @@ class RegistroHabitoApiTest extends TestCase
         return $dragao;
     }
 
-    private function habitoDe(User $usuario, int $peso = 10, string $criadoEm = '2026-11-02 09:00:00'): Habito
-    {
+    private function habitoDe(
+        User $usuario,
+        int $peso = 10,
+        string $criadoEm = '2026-11-02 09:00:00',
+        string $tipoMeta = 'REALIZACAO',
+        ?float $valorMeta = null,
+    ): Habito {
         $agora = now();
         $this->travelTo($criadoEm);
         $habito = Habito::create([
@@ -62,6 +63,8 @@ class RegistroHabitoApiTest extends TestCase
             'fk_id_categoria' => Categoria::create(['nome' => 'Geral'.uniqid()])->id,
             'nome' => 'Ler',
             'peso' => $peso,
+            'tipo_meta' => $tipoMeta,
+            'valor_meta' => $valorMeta,
         ]);
         $this->travelTo($agora);
 
@@ -112,6 +115,65 @@ class RegistroHabitoApiTest extends TestCase
         $this->assertSame(0, $this->usuario->refresh()->xp_vitalicio);
     }
 
+    public function test_realizacao_usa_o_status_enviado(): void
+    {
+        $habito = $this->habitoDe($this->usuario);
+        Sanctum::actingAs($this->usuario);
+
+        $this->marcar($habito, '2026-11-09', ['status' => 'EM_ANDAMENTO', 'percentual' => 30])
+            ->assertJsonPath('data.status', 'EM_ANDAMENTO')
+            ->assertJsonPath('data.percentual', '30.00');
+
+        $this->marcar($habito, '2026-11-09', ['status' => 'NAO_CONCLUIDO'])
+            ->assertJsonPath('data.status', 'NAO_CONCLUIDO')
+            ->assertJsonPath('data.percentual', '0.00');
+
+        // Sem status, um hábito de realização fica como não concluído.
+        $this->marcar($habito, '2026-11-09', ['status' => null])->assertJsonPath('data.status', 'NAO_CONCLUIDO');
+    }
+
+    /** @return array<string, array{0: string, 1: float|null, 2: float|null, 3: string, 4: string}> */
+    public static function cumprimentoPorValor(): array
+    {
+        return [
+            'tempo: meta atingida' => ['TEMPO', 30, 30, 'CONCLUIDO', '100.00'],
+            'tempo: passou da meta' => ['TEMPO', 30, 45, 'CONCLUIDO', '100.00'],
+            'tempo: parcial' => ['TEMPO', 30, 12, 'EM_ANDAMENTO', '40.00'],
+            'tempo: sem valor' => ['TEMPO', 30, null, 'NAO_CONCLUIDO', '0.00'],
+            'tempo: zero' => ['TEMPO', 30, 0, 'NAO_CONCLUIDO', '0.00'],
+            'quantidade: completa' => ['QUANTIDADE', 8, 8, 'CONCLUIDO', '100.00'],
+            'quantidade: parcial' => ['QUANTIDADE', 8, 2, 'EM_ANDAMENTO', '25.00'],
+            'quantidade: sem valor' => ['QUANTIDADE', 8, null, 'NAO_CONCLUIDO', '0.00'],
+            'quantidade sem meta: qualquer valor conclui' => ['QUANTIDADE', null, 3, 'CONCLUIDO', '100.00'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('cumprimentoPorValor')]
+    public function test_tempo_e_quantidade_calculam_o_status_pelo_valor(string $tipo, ?float $meta, ?float $valor, string $status, string $percentual): void
+    {
+        $habito = $this->habitoDe($this->usuario, tipoMeta: $tipo, valorMeta: $meta);
+        Sanctum::actingAs($this->usuario);
+
+        // O status enviado é ignorado em tempo e quantidade.
+        $this->marcar($habito, '2026-11-09', ['status' => 'CONCLUIDO', 'valor_realizado' => $valor])
+            ->assertJsonPath('data.status', $status)
+            ->assertJsonPath('data.percentual', $percentual);
+    }
+
+    public function test_tempo_parcial_rende_xp_proporcional(): void
+    {
+        $habito = $this->habitoDe($this->usuario, tipoMeta: 'TEMPO', valorMeta: 60);
+        Sanctum::actingAs($this->usuario);
+
+        // 30 de 60 minutos: 50% do peso → 12,5 → 13 XP.
+        $this->marcar($habito, '2026-11-05', ['valor_realizado' => 30])->assertCreated();
+        $this->assertDatabaseHas('xp_diario', ['data' => '2026-11-05', 'xp_ganho' => 13]);
+
+        // Completar os 60 minutos sobe para 25 XP.
+        $this->marcar($habito, '2026-11-05', ['valor_realizado' => 60])->assertOk()->assertJsonPath('data.status', 'CONCLUIDO');
+        $this->assertSame(25, $this->usuario->refresh()->xp_vitalicio);
+    }
+
     public function test_marcar_de_novo_atualiza_o_check_in_do_mesmo_dia(): void
     {
         $habito = $this->habitoDe($this->usuario);
@@ -123,7 +185,7 @@ class RegistroHabitoApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.id', $id)
             ->assertJsonPath('data.status', 'CONCLUIDO')
-            ->assertJsonPath('data.percentual', '40.00');
+            ->assertJsonPath('data.percentual', '100.00'); // concluído grava 100%
 
         $this->assertDatabaseCount('registro_habito', 1);
     }
@@ -150,6 +212,22 @@ class RegistroHabitoApiTest extends TestCase
         // Marcar de novo o mesmo hábito não credita XP em dobro.
         $this->marcar($estudar, '2026-11-05')->assertOk();
         $this->assertSame(25, $this->usuario->refresh()->xp_vitalicio);
+    }
+
+    public function test_xp_do_check_in_atualiza_o_estagio_do_dragao(): void
+    {
+        $this->dragao->update(['xp_ciclo' => 110]);
+        $habito = $this->habitoDe($this->usuario);
+        Sanctum::actingAs($this->usuario);
+
+        // 110 + 25 = 135 XP no ciclo: passa do marco de 120 (filhote).
+        $this->marcar($habito, '2026-11-05')->assertCreated();
+        $this->assertSame(135, $this->dragao->refresh()->xp_ciclo);
+        $this->assertSame(\App\Enums\EstagioDragao::FILHOTE, $this->dragao->estagio);
+
+        // Desmarcar volta a 110 XP e ao ovo.
+        $this->desmarcar($habito, '2026-11-05')->assertNoContent();
+        $this->assertSame(\App\Enums\EstagioDragao::OVO, $this->dragao->refresh()->estagio);
     }
 
     public function test_desmarcar_exclui_o_check_in_e_desconta_o_xp(): void

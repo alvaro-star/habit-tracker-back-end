@@ -23,8 +23,11 @@ class RegistroHabitoRequest extends ApiRequest
             'fk_id_habito' => ['required', 'integer', Rule::exists('habito', 'id')->where('fk_id_usuario', $this->user()?->id)],
             /** Dia do check-in (AAAA-MM-DD). Se o hábito já tem check-in nesse dia, ele é atualizado. */
             'data' => ['required', 'date_format:Y-m-d'],
-            'status' => [Rule::excludeIf($desmarcando), 'required', Rule::enum(StatusRegistro::class)],
+            /** Só vale em hábitos de REALIZACAO (sem ele, NAO_CONCLUIDO). Em TEMPO e QUANTIDADE, o status é calculado pelo valor_realizado. */
+            'status' => [Rule::excludeIf($desmarcando), 'nullable', Rule::enum(StatusRegistro::class)],
+            /** Minutos (TEMPO) ou quantidade (QUANTIDADE) feitos no dia, comparados com o valor_meta do hábito. */
             'valor_realizado' => [Rule::excludeIf($desmarcando), 'nullable', 'numeric', 'min:0', 'max:99999999.99'],
+            /** Só vale em hábitos de REALIZACAO com status EM_ANDAMENTO; nos demais casos é calculado. */
             'percentual' => [Rule::excludeIf($desmarcando), 'sometimes', 'numeric', 'between:0,100'],
         ];
     }

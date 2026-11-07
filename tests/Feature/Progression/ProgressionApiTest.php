@@ -3,8 +3,6 @@
 namespace Tests\Feature\Progression;
 
 use App\Models\Dragao;
-use App\Models\Estagio;
-use App\Models\Ovo;
 use App\Models\User;
 use App\Models\XpDiario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -29,8 +27,6 @@ class ProgressionApiTest extends TestCase
     {
         return Dragao::create([
             'fk_id_usuario' => $usuario->id,
-            'fk_id_ovo' => Ovo::create(['nome' => 'Ovo', 'imagem_url' => 'ovo.png'])->id,
-            'fk_id_estagio' => Estagio::create(['nome' => 'Ovo', 'ordem' => 1, 'xp_marco' => 0])->id,
             'nome' => 'Smaug',
             'xp_ciclo' => 0,
             'status' => 'ATIVO',

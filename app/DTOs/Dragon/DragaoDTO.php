@@ -3,14 +3,14 @@
 namespace App\DTOs\Dragon;
 
 use App\DTOs\DTO;
+use App\Enums\ElementoDragao;
 use App\Enums\StatusDragao;
 use Carbon\CarbonImmutable;
 
 final readonly class DragaoDTO extends DTO
 {
     public function __construct(
-        public ?int $ovoId = null,
-        public ?int $estagioId = null,
+        public ?ElementoDragao $elemento = null,
         public ?string $nome = null,
         public ?int $xpCiclo = null,
         public ?StatusDragao $status = null,
@@ -24,8 +24,7 @@ final readonly class DragaoDTO extends DTO
     public static function fromArray(array $dados): self
     {
         return new self(
-            ovoId: self::inteiro($dados, 'fk_id_ovo'),
-            estagioId: self::inteiro($dados, 'fk_id_estagio'),
+            elemento: self::enum($dados, 'elemento', ElementoDragao::class),
             nome: self::texto($dados, 'nome'),
             xpCiclo: self::inteiro($dados, 'xp_ciclo'),
             status: self::enum($dados, 'status', StatusDragao::class),
@@ -39,8 +38,7 @@ final readonly class DragaoDTO extends DTO
     public function toArray(): array
     {
         return $this->semNulos([
-            'fk_id_ovo' => $this->ovoId,
-            'fk_id_estagio' => $this->estagioId,
+            'elemento' => $this->elemento?->value,
             'nome' => $this->nome,
             'xp_ciclo' => $this->xpCiclo,
             'status' => $this->status?->value,

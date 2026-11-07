@@ -27,6 +27,11 @@ class RegistroHabitoController extends Controller
      * existe para o mesmo `fk_id_habito` + `data` (200). Com `checked: false`, exclui o
      * check-in do dia (204). Não há PUT nem DELETE: o POST é a única forma de gravar.
      *
+     * O status depende do tipo de meta do hábito. Em `REALIZACAO`, vale o `status` enviado
+     * (sem ele, `NAO_CONCLUIDO`). Em `TEMPO` e `QUANTIDADE`, o `valor_realizado` é comparado
+     * com o `valor_meta` do hábito: vazio ou zero → `NAO_CONCLUIDO`; atingiu a meta →
+     * `CONCLUIDO`; parcial → `EM_ANDAMENTO`, com o `percentual` proporcional.
+     *
      * A data não pode ser futura nem anterior ao nascimento do dragão ativo (422), e não
      * pode ser anterior à criação do hábito (409). Se a data é anterior a hoje, o XP daquele
      * dia é recalculado e a diferença é somada ao XP do dragão ativo e ao XP vitalício.
