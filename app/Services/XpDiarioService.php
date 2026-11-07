@@ -2,30 +2,112 @@
 
 namespace App\Services;
 
+use App\Enums\DiaSemana;
 use App\Enums\Frequencia;
 use App\Enums\StatusRegistro;
 use App\Models\Habito;
 use App\Models\RegistroHabito;
+use App\Models\User;
+use App\Models\XpDiario;
+use App\Repositories\DragaoRepository;
+use App\Repositories\HabitoRepository;
 use App\Repositories\RegistroHabitoRepository;
+use App\Repositories\UsuarioRepository;
 use App\Repositories\XpDiarioRepository;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
 
+/** @property XpDiarioRepository $repositorio */
 class XpDiarioService extends BaseService
 {
     public function __construct(
         XpDiarioRepository $repositorio,
-        protected HabitoService $habitos,
+        // O repositório, e não o HabitoService: o HabitoService usa este service (ao criar ou desativar hábitos).
+        protected HabitoRepository $habitos,
         protected RegistroHabitoRepository $registros,
+        protected DragaoRepository $dragoes,
+        protected UsuarioRepository $usuarios,
     ) {
         parent::__construct($repositorio);
     }
 
     /**
+     * XP diário do usuário registrado no intervalo, do dia mais recente para o
+     * mais antigo. Tudo vem do banco, inclusive o dia de hoje: o registro do dia
+     * é atualizado sempre que um check-in é marcado ou desmarcado, ou um hábito
+     * é criado ou desativado (atualizarXpDeHoje / recalcularDia).
+     *
+     * @return Collection<int, XpDiario>
+     */
+    public function historicoDoUsuario(User $usuario, CarbonInterface $inicio, CarbonInterface $fim): Collection
+    {
+        return $this->repositorio->doUsuarioNoIntervalo($usuario->id, $inicio, $fim);
+    }
+
+    /**
+     * Recalcula e grava o XP de hoje do usuário, acertando o XP do dragão e o
+     * vitalício pela diferença. É a função a chamar sempre que algo muda o XP
+     * de hoje: check-in de hoje, hábito criado ou hábito desativado.
+     *
+     * @return int a diferença de XP aplicada (negativa quando o XP de hoje cai)
+     */
+    public function atualizarXpDeHoje(int $usuarioId): int
+    {
+        /** @var User $usuario */
+        $usuario = $this->usuarios->buscarOuFalhar($usuarioId);
+
+        return $this->recalcularDia($usuario, CarbonImmutable::today());
+    }
+
+    /**
+     * Recalcula o XP de um dia (passado ou hoje) e acerta os saldos (MOD5-TASK8).
+     *
+     * O XP já creditado do dia é o xp_ganho do registro em xp_diario (0 se o dia
+     * ainda não tem registro). O registro é criado ou atualizado com o XP novo,
+     * no dragão ativo, e a diferença (novo − creditado) é somada ao xp_ciclo do
+     * dragão e ao xp_vitalicio do usuário. Assim, marcar e desmarcar o mesmo
+     * hábito volta os saldos ao que eram. Sem dragão ativo não há onde creditar
+     * o XP (xp_diario.fk_id_dragao é obrigatório), então nada é gravado.
+     *
+     * @return int a diferença de XP aplicada
+     */
+    public function recalcularDia(User $usuario, CarbonInterface $data): int
+    {
+        if ($usuario->fk_id_dragao === null) {
+            return 0;
+        }
+
+        $xp = $this->xpDoDia($usuario->id, $data);
+        $registro = $this->repositorio->doUsuarioNoDia($usuario->id, $data);
+        $diferenca = $xp['xp'] - ($registro?->xp_ganho ?? 0);
+
+        $valores = [
+            'fk_id_dragao' => $usuario->fk_id_dragao,
+            'percentual_ponderado' => $xp['percentual_ponderado'],
+            'xp_ganho' => $xp['xp'],
+        ];
+
+        if ($registro === null) {
+            $this->repositorio->criar([...$valores, 'fk_id_usuario' => $usuario->id, 'data' => $data->toDateString()]);
+        } else {
+            $this->repositorio->atualizar($registro, $valores);
+        }
+
+        if ($diferenca !== 0) {
+            $this->dragoes->somarXpCiclo($usuario->fk_id_dragao, $diferenca);
+            $this->usuarios->somarXpVitalicio($usuario->id, $diferenca);
+        }
+
+        return $diferenca;
+    }
+
+    /**
      * XP do dia (ESCOPO.md, seção 3.3): XP = (∑W cumpridos / ∑W total) × teto diário.
      *
-     * O ∑W total é a soma dos pesos dos hábitos do dia (HabitoService::habitosDiarios), sem os
-     * semanais, que o escopo apura num pool próprio ao fim da semana. O ∑W
+     * Calcula de forma dinâmica para qualquer dia. O ∑W total é a soma dos pesos
+     * dos hábitos ativos do dia que já existiam na data (criados até ela), sem
+     * os semanais, que o escopo apura num pool próprio ao fim da semana. O ∑W
      * cumpridos vem de pesoRealizadoDoDia(). O XP é arredondado para inteiro,
      * como a coluna xp_diario.xp_ganho.
      *
@@ -41,7 +123,9 @@ class XpDiarioService extends BaseService
      */
     public function xpDoDia(int $usuarioId, CarbonInterface $data): array
     {
-        $habitos = $this->habitos->habitosDiarios($usuarioId, $data)
+        // TODO: desconsiderar os hábitos desativados no período só a partir do inactivated_at
+        // (ver HabitoRepository::ativosDoUsuarioNoDia), em vez de tirá-los de todos os dias.
+        $habitos = $this->habitos->ativosDoUsuarioNoDia($usuarioId, $data, DiaSemana::daData($data))
             ->reject(fn (Habito $habito) => $habito->frequencia === Frequencia::SEMANAL->value)
             ->values();
 

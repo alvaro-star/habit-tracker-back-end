@@ -104,6 +104,21 @@ class XpDoDiaTest extends TestCase
         $this->assertSame(15.0, $this->xpDoDia()['peso_realizado']);
     }
 
+    public function test_habito_criado_depois_da_data_nao_entra_no_xp_do_dia(): void
+    {
+        $this->checkIn($this->habito('Beber água', 'FACIL', 5), 'CONCLUIDO');
+
+        // Criado bem depois de 2026-11-09: não existia naquele dia.
+        $this->travelTo('2026-12-15');
+        $this->habito('Estudar', 'MUITO_DIFICIL', 20);
+
+        $xp = $this->xpDoDia('2026-11-09');
+
+        $this->assertSame(5, $xp['peso_total']);
+        $this->assertSame(['Beber água'], array_column($xp['habitos'], 'nome'));
+        $this->assertSame(25, $xp['xp']);
+    }
+
     public function test_dia_sem_habitos_rende_zero_xp(): void
     {
         $xp = $this->xpDoDia();
