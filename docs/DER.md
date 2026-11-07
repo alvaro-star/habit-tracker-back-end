@@ -37,10 +37,9 @@ erDiagram
     dragao {
         int id PK "increment"
         int fk_id_usuario FK "NOT NULL · → usuario"
-        int fk_id_ovo FK "NOT NULL · → ovo"
-        int fk_id_estagio FK "NOT NULL · → estagio"
         varchar(40) nome "NOT NULL"
         int xp_ciclo "NOT NULL"
+        estagio_dragao estagio "NOT NULL · gerado pelo xp_ciclo"
         status_dragao status "NOT NULL"
         date data_nascimento "NOT NULL"
         date data_termino
@@ -51,7 +50,7 @@ erDiagram
         int id PK "increment"
         int fk_id_dragao FK "NOT NULL · → dragao"
         int fk_id_elemento FK "NOT NULL · → elemento"
-        int fk_id_estagio FK "NOT NULL · → estagio"
+        estagio_dragao estagio "NOT NULL · estágio do dragão na escolha"
         timestamp data_escolha "NOT NULL"
     }
     xp_diario {
@@ -62,21 +61,10 @@ erDiagram
         decimal percentual_ponderado "(5,2) · NOT NULL"
         int xp_ganho "NOT NULL"
     }
-    estagio {
-        int id PK "increment"
-        varchar(30) nome "NOT NULL"
-        int ordem "NOT NULL"
-        int xp_marco "NOT NULL"
-    }
     elemento {
         int id PK "increment"
         varchar(20) nome UK "NOT NULL"
         varchar(255) cenario_url "NOT NULL"
-    }
-    ovo {
-        int id PK "increment"
-        varchar(40) nome "NOT NULL"
-        varchar(255) imagem_url "NOT NULL"
     }
     habito_modelo {
         int id PK "increment"
@@ -141,11 +129,8 @@ erDiagram
     dragao ||--o{ xp_diario : "fk_id_dragao"
     dragao |o--o| usuario : "fk_id_dragao (ativo)"
     usuario ||--o{ dragao : "fk_id_usuario"
-    ovo ||--o{ dragao : "fk_id_ovo"
-    estagio ||--o{ dragao : "fk_id_estagio"
     dragao ||--o{ escolha_elemento : "fk_id_dragao"
     elemento ||--o{ escolha_elemento : "fk_id_elemento"
-    estagio ||--o{ escolha_elemento : "fk_id_estagio"
     usuario ||--o{ usuario_insignia : "fk_id_usuario"
     insignia ||--o{ usuario_insignia : "fk_id_insignia"
     usuario ||--o{ config_notificacao : "fk_id_usuario"
@@ -162,8 +147,11 @@ erDiagram
 | `frequencia` | `DIARIA`, `SEMANAL`, `MENSAL` |
 | `status_registro` | `CONCLUIDO`, `EM_ANDAMENTO`, `NAO_CONCLUIDO` |
 | `status_dragao` | `ATIVO`, `SANTUARIO` |
+| `estagio_dragao` | `OVO` (0 XP), `FILHOTE` (120), `JOVEM` (1.000), `ADULTO` (3.500), `ADULTO_FINAL` (9.000) |
 | `canal_notificacao` | `PUSH`, `IN_APP` |
 | `dia_semana` | `SEG`, `TER`, `QUA`, `QUI`, `SEX`, `SAB`, `DOM` |
+
+O estágio de crescimento do dragão é o enum `estagio_dragao` (ESCOPO §4.2), guardado em `dragao.estagio` e atualizado sempre que o `xp_ciclo` muda; o marco de 6.000 XP (escolha do elemento) não é um estágio. Não há tabelas de estágio nem de ovo: o dragão não registra de que ovo nasceu.
 
 Um usuário pode ter vários dragões (os do Santuário, com status `SANTUARIO`), mas só um `ATIVO`, apontado por `usuario.fk_id_dragao` (null quando não há dragão ativo).
 
