@@ -29,6 +29,7 @@ class HabitoResource extends JsonResource
             'dificuldade' => $this->dificuldade,
             'peso' => $this->peso,
             'ativo' => $this->ativo,
+            'inactivated_at' => $this->inactivated_at,
             'created_at' => $this->created_at,
         ];
     }

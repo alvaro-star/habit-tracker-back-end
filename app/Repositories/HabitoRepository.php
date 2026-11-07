@@ -13,9 +13,21 @@ class HabitoRepository extends BaseRepository
 {
     protected string $model = Habito::class;
 
+    /** Diz se o hábito já tem algum check-in (registro_habito). */
+    public function temRegistros(Habito $habito): bool
+    {
+        return $habito->registros()->exists();
+    }
+
     /**
      * Hábitos ativos do usuário, já criados na data, que caem naquele dia:
      * os diários, os semanais do dia da semana e os mensais do dia do mês.
+     * É a base do XP diário (XpDiarioService::xpDoDia) e dos hábitos do dia.
+     *
+     * TODO: usar o inactivated_at para desconsiderar o hábito só a partir do dia
+     * em que foi desativado. Hoje o filtro ativo = true tira o hábito de todos os
+     * dias, inclusive dos anteriores à desativação, o que muda o XP diário e o
+     * progresso dos hábitos de períodos em que ele ainda estava ativo.
      *
      * @return Collection<int, Habito>
      */

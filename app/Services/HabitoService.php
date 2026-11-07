@@ -6,22 +6,22 @@ use App\DTOs\DTO;
 use App\Enums\DiaSemana;
 use App\Enums\Dificuldade;
 use App\Enums\Frequencia;
-use App\Enums\StatusRegistro;
 use App\Exceptions\RegraDeNegocioException;
 use App\Models\Habito;
-use App\Models\RegistroHabito;
 use App\Repositories\HabitoRepository;
-use App\Repositories\RegistroHabitoRepository;
+use BackedEnum;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 /** @property HabitoRepository $repositorio */
 class HabitoService extends BaseService
 {
     public function __construct(
         HabitoRepository $repositorio,
-        protected RegistroHabitoRepository $registros,
+        protected XpDiarioService $xpDiario,
     ) {
         parent::__construct($repositorio);
     }
@@ -29,16 +29,18 @@ class HabitoService extends BaseService
     /** @param array<string, mixed>|DTO $dados */
     public function criar(array|DTO $dados): Model
     {
-        return $this->repositorio->criar($this->comFrequenciaValidada($this->paraArray($dados)));
+        return DB::transaction(fn () => $this->comXpDeHojeAtualizado(
+            $this->repositorio->criar($this->comFrequenciaValidada($this->paraArray($dados))),
+        ));
     }
 
     /** @param array<string, mixed>|DTO $dados */
     public function criarParaUsuario(int $usuarioId, array|DTO $dados): Model
     {
-        return $this->repositorio->criar([
+        return DB::transaction(fn () => $this->comXpDeHojeAtualizado($this->repositorio->criar([
             ...$this->comFrequenciaValidada($this->paraArray($dados)),
             'fk_id_usuario' => $usuarioId,
-        ]);
+        ])));
     }
 
     /** @param array<string, mixed>|DTO $dados */
@@ -46,8 +48,10 @@ class HabitoService extends BaseService
     {
         /** @var Habito $habito */
         $habito = $this->buscar($id);
+        $dados = $this->comDataDeInativacao($this->paraArray($dados), $habito);
+        $this->garantirTipoMetaEditavel($dados, $habito);
 
-        return $this->repositorio->atualizar($habito, $this->comFrequenciaValidada($this->paraArray($dados), $habito));
+        return $this->repositorio->atualizar($habito, $this->comFrequenciaValidada($dados, $habito));
     }
 
     /** @param array<string, mixed>|DTO $dados */
@@ -55,8 +59,30 @@ class HabitoService extends BaseService
     {
         /** @var Habito $habito */
         $habito = $this->buscarDoUsuario($usuarioId, $id);
+        $dados = $this->comDataDeInativacao($this->paraArray($dados), $habito);
+        $this->garantirTipoMetaEditavel($dados, $habito);
 
-        return $this->repositorio->atualizar($habito, $this->comFrequenciaValidada($this->paraArray($dados), $habito));
+        return $this->repositorio->atualizar($habito, $this->comFrequenciaValidada($dados, $habito));
+    }
+
+    /**
+     * Excluir um hábito só o desativa (ativo = false): o registro e os seus
+     * check-ins continuam no banco, para o histórico e as estatísticas.
+     */
+    public function excluir(int|string $id): bool
+    {
+        /** @var Habito $habito */
+        $habito = $this->buscar($id);
+
+        return $this->desativar($habito);
+    }
+
+    public function excluirDoUsuario(int $usuarioId, int|string $id): bool
+    {
+        /** @var Habito $habito */
+        $habito = $this->buscarDoUsuario($usuarioId, $id);
+
+        return $this->desativar($habito);
     }
 
     /**
@@ -86,82 +112,84 @@ class HabitoService extends BaseService
     }
 
     /**
-     * XP do dia (ESCOPO.md, seção 3.3): XP = (∑W cumpridos / ∑W total) × teto diário.
+     * O tipo de meta só pode mudar enquanto o hábito não tem check-ins: os
+     * registros já feitos (valor, percentual) dependem do tipo de meta. Enviar
+     * o mesmo tipo de meta que já está salvo não é uma mudança.
      *
-     * O ∑W total é a soma dos pesos dos hábitos do dia (habitosDiarios), sem os
-     * semanais, que o escopo apura num pool próprio ao fim da semana. O ∑W
-     * cumpridos vem de pesoRealizadoDoDia(). O XP é arredondado para inteiro,
-     * como a coluna xp_diario.xp_ganho.
+     * @param  array<string, mixed>  $dados
      *
-     * @return array{
-     *     data: string,
-     *     habitos: array<int, array{id: int, nome: string, frequencia: string, peso: int, status: ?string, percentual: ?float, peso_realizado: float}>,
-     *     peso_total: int,
-     *     peso_realizado: float,
-     *     percentual_ponderado: float,
-     *     teto_diario: int,
-     *     xp: int,
-     * }
+     * @throws RegraDeNegocioException respondida como 422
      */
-    public function xpDoDia(int $usuarioId, CarbonInterface $data): array
+    private function garantirTipoMetaEditavel(array $dados, Habito $habito): void
     {
-        $habitos = $this->habitosDiarios($usuarioId, $data)
-            ->reject(fn (Habito $habito) => $habito->frequencia === Frequencia::SEMANAL->value)
-            ->values();
+        $novo = $dados['tipo_meta'] ?? null;
+        $novo = $novo instanceof BackedEnum ? $novo->value : $novo;
 
-        $pesoTotal = (int) $habitos->sum('peso');
-        $realizado = $this->pesoRealizadoDoDia($habitos, $data);
-        $pesoRealizado = round(array_sum(array_column($realizado, 'peso_realizado')), 2);
-        $proporcao = $pesoTotal > 0 ? min($pesoRealizado / $pesoTotal, 1) : 0;
-        $teto = (int) config('progression.teto_diario');
+        if ($novo === null || $novo === $habito->tipo_meta) {
+            return;
+        }
 
-        return [
-            'data' => $data->toDateString(),
-            'habitos' => $habitos->map(fn (Habito $habito) => [
-                'id' => $habito->id,
-                'nome' => $habito->nome,
-                'frequencia' => $habito->frequencia,
-                'peso' => $habito->peso,
-                ...$realizado[$habito->id],
-            ])->all(),
-            'peso_total' => $pesoTotal,
-            'peso_realizado' => $pesoRealizado,
-            'percentual_ponderado' => round($proporcao * 100, 2),
-            'teto_diario' => $teto,
-            'xp' => (int) round($proporcao * $teto),
-        ];
+        if ($this->repositorio->temRegistros($habito)) {
+            throw new RegraDeNegocioException('tipo_meta', 'O tipo de meta não pode ser alterado: o hábito já tem check-ins registrados.');
+        }
     }
 
     /**
-     * Peso cumprido de cada hábito na data, a partir do check-in (registro_habito):
-     * CONCLUIDO soma o peso inteiro, EM_ANDAMENTO soma o peso proporcional ao
-     * percentual, e NAO_CONCLUIDO ou sem check-in soma zero. Se houver mais de
-     * um check-in do hábito no dia, vale o mais recente.
+     * Só é possível excluir (desativar) um hábito no próprio dia em que ele foi
+     * criado; um hábito criado num dia anterior a hoje devolve 422. A data da
+     * desativação fica em inactivated_at.
      *
-     * @param  Collection<int, Habito>  $habitos
-     * @return array<int, array{status: ?string, percentual: ?float, peso_realizado: float}> indexado pelo id do hábito
+     * @throws RegraDeNegocioException
      */
-    public function pesoRealizadoDoDia(Collection $habitos, CarbonInterface $data): array
+    private function desativar(Habito $habito): bool
     {
-        $registros = $this->registros->dosHabitosNoDia($habitos->modelKeys(), $data)->keyBy('fk_id_habito');
+        if ($habito->created_at->toDateString() < CarbonImmutable::today()->toDateString()) {
+            throw new RegraDeNegocioException(
+                'id',
+                'O hábito não pode ser excluído: só é possível excluir um hábito no dia em que ele foi criado ('.$habito->created_at->toDateString().').',
+            );
+        }
 
-        return $habitos->mapWithKeys(function (Habito $habito) use ($registros) {
-            /** @var RegistroHabito|null $registro */
-            $registro = $registros->get($habito->id);
-            $percentual = $registro === null ? null : (float) $registro->percentual;
+        DB::transaction(fn () => $this->comXpDeHojeAtualizado($this->repositorio->atualizar($habito, [
+            'ativo' => false,
+            'inactivated_at' => $habito->inactivated_at ?? now(),
+        ])));
 
-            $pesoRealizado = match ($registro?->status) {
-                StatusRegistro::CONCLUIDO->value => (float) $habito->peso,
-                StatusRegistro::EM_ANDAMENTO->value => round($habito->peso * $percentual / 100, 2),
-                default => 0.0,
-            };
+        return true;
+    }
 
-            return [$habito->id => [
-                'status' => $registro?->status,
-                'percentual' => $percentual,
-                'peso_realizado' => $pesoRealizado,
-            ]];
-        })->all();
+    /**
+     * Mantém o inactivated_at coerente quando o PATCH muda o campo ativo: ao
+     * desativar, guarda o momento; ao reativar, limpa.
+     *
+     * @param  array<string, mixed>  $dados
+     * @return array<string, mixed>
+     */
+    private function comDataDeInativacao(array $dados, Habito $habito): array
+    {
+        if (! array_key_exists('ativo', $dados)) {
+            return $dados;
+        }
+
+        if ($dados['ativo']) {
+            $dados['inactivated_at'] = null;
+        } elseif ($habito->ativo) {
+            $dados['inactivated_at'] = now();
+        }
+
+        return $dados;
+    }
+
+    /**
+     * Um hábito novo entra no ∑W total de hoje (o XP de hoje cai) e um hábito
+     * desativado sai dele (o XP de hoje sobe): o XP de hoje é recalculado e a
+     * diferença é aplicada ao dragão e ao usuário.
+     */
+    private function comXpDeHojeAtualizado(Model $habito): Model
+    {
+        $this->xpDiario->atualizarXpDeHoje($habito->fk_id_usuario);
+
+        return $habito;
     }
 
     /**
@@ -190,21 +218,26 @@ class HabitoService extends BaseService
     }
 
     /**
-     * O peso é sempre gerado pela dificuldade (ESCOPO.md, seção 3.2): um peso
-     * informado é descartado, e trocar a dificuldade recalcula o peso. Vale
-     * para todas as operações de criação e edição do BaseService.
+     * A dificuldade é sempre gerada pelo peso (Dificuldade::doPeso): uma
+     * dificuldade informada é descartada, e trocar o peso recalcula a
+     * dificuldade. Vale para todas as operações de criação e edição.
+     *
+     * @throws RegraDeNegocioException se o peso estiver fora de 1 a 20
      */
     protected function paraArray(array|DTO $dados): array
     {
         $dados = parent::paraArray($dados);
-        unset($dados['peso']);
+        unset($dados['dificuldade']);
 
-        if (isset($dados['dificuldade'])) {
-            $dificuldade = $dados['dificuldade'] instanceof Dificuldade
-                ? $dados['dificuldade']
-                : Dificuldade::from($dados['dificuldade']);
+        if (isset($dados['peso'])) {
+            $peso = (int) $dados['peso'];
 
-            $dados['peso'] = $dificuldade->peso();
+            if ($peso < Dificuldade::PESO_MINIMO || $peso > Dificuldade::PESO_MAXIMO) {
+                throw new RegraDeNegocioException('peso', 'O peso deve ficar entre '.Dificuldade::PESO_MINIMO.' e '.Dificuldade::PESO_MAXIMO.'.');
+            }
+
+            $dados['peso'] = $peso;
+            $dados['dificuldade'] = Dificuldade::doPeso($peso)->value;
         }
 
         return $dados;

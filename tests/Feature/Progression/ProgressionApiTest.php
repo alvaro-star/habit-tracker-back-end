@@ -38,9 +38,8 @@ class ProgressionApiTest extends TestCase
         ]);
     }
 
-    public function test_crud_de_niveis_e_insignias(): void
+    public function test_crud_de_insignias(): void
     {
-        $this->verificarCrud('/api/progression/levels', ['xp_necessario' => 100, 'xp_acumulado' => 100], ['xp_necessario' => 110]);
         $this->verificarCrud('/api/progression/badges', [
             'nome' => 'Primeiro passo',
             'descricao' => 'Concluiu o primeiro hábito',
@@ -48,49 +47,97 @@ class ProgressionApiTest extends TestCase
         ], ['descricao' => 'Concluiu o primeiro hábito do dia']);
     }
 
-    public function test_registra_xp_diario_para_o_usuario_autenticado(): void
+    private function xpRegistrado(User $usuario, string $data, int $xp): XpDiario
     {
-        $dragao = $this->dragaoDe($this->usuario);
-
-        $this->postJson('/api/progression/daily-xp', [
-            'fk_id_dragao' => $dragao->id,
-            'data' => '2026-11-04',
-            'percentual_ponderado' => 87.5,
-            'xp_ganho' => 22,
-        ])
-            ->assertCreated()
-            ->assertJsonPath('data.data', '2026-11-04')
-            ->assertJsonPath('data.percentual_ponderado', '87.50')
-            ->assertJsonPath('data.xp_ganho', 22);
-
-        $this->assertDatabaseHas('xp_diario', ['fk_id_usuario' => $this->usuario->id, 'xp_ganho' => 22]);
+        return XpDiario::create([
+            'fk_id_usuario' => $usuario->id,
+            'fk_id_dragao' => $this->dragaoDe($usuario)->id,
+            'data' => $data,
+            'percentual_ponderado' => $xp * 4,
+            'xp_ganho' => $xp,
+        ]);
     }
 
-    public function test_nao_registra_xp_em_dragao_de_outro_usuario(): void
+    public function test_lista_o_xp_registrado_no_intervalo_inclusive_hoje(): void
     {
-        $alheio = $this->dragaoDe(User::factory()->create());
+        $this->travelTo('2026-11-09 10:00:00');
+        $this->xpRegistrado($this->usuario, '2026-10-31', 5); // antes do intervalo
+        $inicio = $this->xpRegistrado($this->usuario, '2026-11-01', 10);
+        $ontem = $this->xpRegistrado($this->usuario, '2026-11-08', 20);
+        $hoje = $this->xpRegistrado($this->usuario, '2026-11-09', 25);
 
-        $this->postJson('/api/progression/daily-xp', [
-            'fk_id_dragao' => $alheio->id,
-            'data' => '2026-11-04',
-            'percentual_ponderado' => 50,
-            'xp_ganho' => 12,
-        ])->assertUnprocessable()->assertJsonValidationErrors(['fk_id_dragao']);
+        $this->getJson('/api/progression/daily-xp?data_inicio=2026-11-01&data_fim=2026-11-30')
+            ->assertOk()
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('data.0.id', $hoje->id)
+            ->assertJsonPath('data.0.data', '2026-11-09')
+            ->assertJsonPath('data.1.id', $ontem->id)
+            ->assertJsonPath('data.2.id', $inicio->id)
+            ->assertJsonMissingPath('data.0.parcial');
+    }
+
+    public function test_intervalo_no_passado_traz_so_os_dias_do_intervalo(): void
+    {
+        $this->travelTo('2026-11-09 10:00:00');
+        $xp = $this->xpRegistrado($this->usuario, '2026-11-02', 15);
+        $this->xpRegistrado($this->usuario, '2026-11-09', 25);
+
+        $this->getJson('/api/progression/daily-xp?data_inicio=2026-11-01&data_fim=2026-11-05')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $xp->id);
+    }
+
+    public function test_dia_sem_registro_nao_aparece(): void
+    {
+        $this->travelTo('2026-11-09 10:00:00');
+
+        // Nada foi marcado nem criado hoje: não há registro, e nada é calculado na listagem.
+        $this->getJson('/api/progression/daily-xp?data_inicio=2026-11-09&data_fim=2026-11-09')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+        $this->assertDatabaseCount('xp_diario', 0);
+    }
+
+    /** @return array<string, array{0: string, 1: array<int, string>}> */
+    public static function intervalosInvalidos(): array
+    {
+        return [
+            'sem intervalo' => ['', ['data_inicio', 'data_fim']],
+            'sem data_fim' => ['data_inicio=2026-11-01', ['data_fim']],
+            'dia inexistente' => ['data_inicio=2026-04-31&data_fim=2026-05-10', ['data_inicio']],
+            'fim antes do início' => ['data_inicio=2026-11-10&data_fim=2026-11-01', ['data_fim']],
+            'formato brasileiro' => ['data_inicio=01/11/2026&data_fim=2026-11-10', ['data_inicio']],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('intervalosInvalidos')]
+    public function test_recusa_intervalo_invalido(string $consulta, array $campos): void
+    {
+        $this->getJson("/api/progression/daily-xp?{$consulta}")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors($campos);
     }
 
     public function test_xp_diario_de_outro_usuario_fica_invisivel(): void
     {
-        $outro = User::factory()->create();
-        $xp = XpDiario::create([
-            'fk_id_usuario' => $outro->id,
-            'fk_id_dragao' => $this->dragaoDe($outro)->id,
-            'data' => '2026-11-04',
-            'percentual_ponderado' => 50,
-            'xp_ganho' => 12,
-        ]);
+        $this->travelTo('2026-11-09 10:00:00');
+        $this->xpRegistrado(User::factory()->create(), '2026-11-04', 12);
 
-        $this->getJson('/api/progression/daily-xp')->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/api/progression/daily-xp?data_inicio=2026-11-01&data_fim=2026-11-08')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    public function test_xp_diario_nao_pode_ser_criado_editado_nem_excluido(): void
+    {
+        $xp = $this->xpRegistrado($this->usuario, '2026-11-04', 12);
+
+        $this->postJson('/api/progression/daily-xp', ['xp_ganho' => 25])->assertMethodNotAllowed();
         $this->getJson("/api/progression/daily-xp/{$xp->id}")->assertNotFound();
+        $this->putJson("/api/progression/daily-xp/{$xp->id}", ['xp_ganho' => 25])->assertNotFound();
         $this->deleteJson("/api/progression/daily-xp/{$xp->id}")->assertNotFound();
+
+        $this->assertDatabaseHas('xp_diario', ['id' => $xp->id, 'xp_ganho' => 12]);
     }
 }

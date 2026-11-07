@@ -22,7 +22,8 @@ class XpDiario extends Model
     protected function casts(): array
     {
         return [
-            'data' => 'date',
+            // Só a data, sem hora, como em registro_habito.
+            'data' => 'date:Y-m-d',
             'percentual_ponderado' => 'decimal:2',
         ];
     }

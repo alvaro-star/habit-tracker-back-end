@@ -68,6 +68,64 @@ class DragonApiTest extends TestCase
         $this->assertDatabaseHas('dragao', ['nome' => 'Smaug', 'fk_id_usuario' => $this->usuario->id]);
     }
 
+    private function corpoDragao(array $extra = []): array
+    {
+        return array_merge([
+            'fk_id_ovo' => Ovo::create(['nome' => 'Ovo', 'imagem_url' => 'ovo.png'])->id,
+            'fk_id_estagio' => Estagio::create(['nome' => 'Ovo', 'ordem' => 1, 'xp_marco' => 0])->id,
+            'nome' => 'Smaug',
+            'xp_ciclo' => 0,
+            'status' => 'ATIVO',
+            'data_nascimento' => '2026-11-04',
+        ], $extra);
+    }
+
+    public function test_criar_dragao_ativo_vira_o_dragao_do_usuario(): void
+    {
+        $id = $this->postJson('/api/dragon/dragons', $this->corpoDragao())->assertCreated()->json('data.id');
+
+        $this->assertSame($id, $this->usuario->refresh()->fk_id_dragao);
+        $this->getJson('/api/user')->assertOk()->assertJsonPath('data.fk_id_dragao', $id);
+    }
+
+    public function test_so_um_dragao_ativo_por_usuario(): void
+    {
+        $this->postJson('/api/dragon/dragons', $this->corpoDragao())->assertCreated();
+
+        $this->postJson('/api/dragon/dragons', $this->corpoDragao(['nome' => 'Segundo']))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['status']);
+
+        // Um dragão do Santuário pode ser criado mesmo com outro ativo.
+        $this->postJson('/api/dragon/dragons', $this->corpoDragao(['nome' => 'Antigo', 'status' => 'SANTUARIO']))->assertCreated();
+        $this->assertSame(2, Dragao::where('fk_id_usuario', $this->usuario->id)->count());
+    }
+
+    public function test_aposentar_e_reativar_atualiza_o_dragao_do_usuario(): void
+    {
+        $primeiro = $this->postJson('/api/dragon/dragons', $this->corpoDragao())->json('data.id');
+        $segundo = $this->postJson('/api/dragon/dragons', $this->corpoDragao(['status' => 'SANTUARIO']))->json('data.id');
+
+        $this->patchJson("/api/dragon/dragons/{$segundo}", ['status' => 'ATIVO'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['status']);
+
+        $this->patchJson("/api/dragon/dragons/{$primeiro}", ['status' => 'SANTUARIO'])->assertOk();
+        $this->assertNull($this->usuario->refresh()->fk_id_dragao);
+
+        $this->patchJson("/api/dragon/dragons/{$segundo}", ['status' => 'ATIVO'])->assertOk();
+        $this->assertSame($segundo, $this->usuario->refresh()->fk_id_dragao);
+    }
+
+    public function test_excluir_o_dragao_ativo_limpa_o_dragao_do_usuario(): void
+    {
+        $id = $this->postJson('/api/dragon/dragons', $this->corpoDragao())->json('data.id');
+
+        $this->deleteJson("/api/dragon/dragons/{$id}")->assertNoContent();
+
+        $this->assertNull($this->usuario->refresh()->fk_id_dragao);
+    }
+
     public function test_dragoes_de_outro_usuario_ficam_invisiveis(): void
     {
         $meu = $this->dragaoDe($this->usuario);

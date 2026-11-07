@@ -18,14 +18,14 @@ class DtoTest extends TestCase
             'fk_id_categoria' => '3',
             'nome' => 'Ler',
             'polaridade' => 'BOM',
-            'dificuldade' => 'DIFICIL',
+            'peso' => '12',
             'valor_meta' => '10.5',
             'ativo' => '0',
         ]);
 
         $this->assertSame(3, $dto->categoriaId);
         $this->assertSame(Polaridade::BOM, $dto->polaridade);
-        $this->assertSame(Dificuldade::DIFICIL, $dto->dificuldade);
+        $this->assertSame(12, $dto->peso);
         $this->assertSame(10.5, $dto->valorMeta);
         $this->assertFalse($dto->ativo);
     }
@@ -37,11 +37,19 @@ class DtoTest extends TestCase
         $this->assertSame(['nome' => 'Ler', 'polaridade' => 'RUIM', 'ativo' => false], $dto->toArray());
     }
 
-    public function test_habito_dto_nao_aceita_peso(): void
+    public function test_habito_dto_nao_aceita_dificuldade(): void
     {
-        $dto = HabitoDTO::fromArray(['nome' => 'Ler', 'peso' => 20]);
+        $dto = HabitoDTO::fromArray(['nome' => 'Ler', 'dificuldade' => 'FACIL']);
 
-        $this->assertArrayNotHasKey('peso', $dto->toArray());
+        $this->assertArrayNotHasKey('dificuldade', $dto->toArray());
+    }
+
+    public function test_dificuldade_vem_do_peso(): void
+    {
+        $this->assertSame(Dificuldade::FACIL, Dificuldade::doPeso(1));
+        $this->assertSame(Dificuldade::MEDIO, Dificuldade::doPeso(6));
+        $this->assertSame(Dificuldade::DIFICIL, Dificuldade::doPeso(15));
+        $this->assertSame(Dificuldade::MUITO_DIFICIL, Dificuldade::doPeso(20));
     }
 
     public function test_peso_vem_da_dificuldade(): void

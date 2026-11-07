@@ -57,6 +57,13 @@ class HabitoController extends Controller
         return new HabitoResource($this->service->atualizarDoUsuario($request->user()->id, $id, $request->toDto()));
     }
 
+    /**
+     * Desativa um hábito.
+     *
+     * O hábito não é apagado: ele passa a `ativo = false` e mantém os seus check-ins,
+     * para o histórico e as estatísticas. Para reativá-lo, envie `ativo: true` no PUT/PATCH.
+     * Um hábito inativo continua na listagem e no `GET /api/habits/{id}`, mas sai dos hábitos do dia.
+     */
     public function destroy(Request $request, int $id): Response
     {
         $this->service->excluirDoUsuario($request->user()->id, $id);

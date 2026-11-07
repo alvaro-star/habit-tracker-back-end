@@ -1,12 +1,12 @@
 <?php
 
-namespace Tests\Feature\Habits;
+namespace Tests\Feature\Progression;
 
 use App\Models\Categoria;
 use App\Models\Habito;
 use App\Models\RegistroHabito;
 use App\Models\User;
-use App\Services\HabitoService;
+use App\Services\XpDiarioService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -48,7 +48,7 @@ class XpDoDiaTest extends TestCase
 
     private function xpDoDia(string $data = '2026-11-09'): array
     {
-        return app(HabitoService::class)->xpDoDia($this->usuario->id, CarbonImmutable::parse($data));
+        return app(XpDiarioService::class)->xpDoDia($this->usuario->id, CarbonImmutable::parse($data));
     }
 
     public function test_calcula_o_xp_ponderado_com_concluidos_e_em_andamento(): void
@@ -83,16 +83,34 @@ class XpDoDiaTest extends TestCase
         $this->assertSame(25, $this->xpDoDia()['xp']);
     }
 
-    public function test_habitos_semanais_ficam_fora_do_xp_diario(): void
+    public function test_habito_semanal_entra_no_xp_do_seu_dia_da_semana(): void
     {
         $this->checkIn($this->habito('Beber água', 'FACIL', 5), 'CONCLUIDO');
-        $this->checkIn($this->habito('Faxina', 'MUITO_DIFICIL', 20, 'SEMANAL', 'SEG'), 'NAO_CONCLUIDO', 0);
+        $faxina = $this->habito('Faxina', 'MUITO_DIFICIL', 20, 'SEMANAL', 'SEG');
+        $this->checkIn($faxina, 'NAO_CONCLUIDO', 0);
 
-        $xp = $this->xpDoDia(); // 2026-11-09 é segunda-feira
+        // 2026-11-09 é segunda-feira: a faxina entra no total (5 + 20) e não foi cumprida.
+        $segunda = $this->xpDoDia('2026-11-09');
+        $this->assertSame(25, $segunda['peso_total']);
+        $this->assertSame(['Beber água', 'Faxina'], array_column($segunda['habitos'], 'nome'));
+        $this->assertSame(5, $segunda['xp']); // 5/25 × 25
 
-        $this->assertSame(5, $xp['peso_total']);
-        $this->assertSame(25, $xp['xp']);
-        $this->assertCount(1, $xp['habitos']);
+        // Cumprir a faxina na segunda completa o dia.
+        $this->checkIn($faxina, 'CONCLUIDO');
+        $this->assertSame(25, $this->xpDoDia('2026-11-09')['xp']);
+
+        // Na terça, a faxina não cai: só a água conta.
+        $this->checkIn($this->habito('Beber água 2', 'FACIL', 5), 'CONCLUIDO', 100, '2026-11-10');
+        $terca = $this->xpDoDia('2026-11-10');
+        $this->assertNotContains('Faxina', array_column($terca['habitos'], 'nome'));
+    }
+
+    public function test_habito_mensal_entra_no_xp_do_seu_dia_do_mes(): void
+    {
+        $this->checkIn($this->habito('Contas do mês', 'MEDIO', 10, 'MENSAL', '9'), 'CONCLUIDO');
+
+        $this->assertSame(10, $this->xpDoDia('2026-11-09')['peso_total']);
+        $this->assertSame(0, $this->xpDoDia('2026-11-10')['peso_total']);
     }
 
     public function test_vale_o_check_in_mais_recente_do_dia(): void
@@ -102,6 +120,21 @@ class XpDoDiaTest extends TestCase
         $this->checkIn($estudar, 'CONCLUIDO');
 
         $this->assertSame(15.0, $this->xpDoDia()['peso_realizado']);
+    }
+
+    public function test_habito_criado_depois_da_data_nao_entra_no_xp_do_dia(): void
+    {
+        $this->checkIn($this->habito('Beber água', 'FACIL', 5), 'CONCLUIDO');
+
+        // Criado bem depois de 2026-11-09: não existia naquele dia.
+        $this->travelTo('2026-12-15');
+        $this->habito('Estudar', 'MUITO_DIFICIL', 20);
+
+        $xp = $this->xpDoDia('2026-11-09');
+
+        $this->assertSame(5, $xp['peso_total']);
+        $this->assertSame(['Beber água'], array_column($xp['habitos'], 'nome'));
+        $this->assertSame(25, $xp['xp']);
     }
 
     public function test_dia_sem_habitos_rende_zero_xp(): void

@@ -3,136 +3,315 @@
 namespace Tests\Feature\CheckIns;
 
 use App\Models\Categoria;
+use App\Models\Dragao;
+use App\Models\Estagio;
 use App\Models\Habito;
+use App\Models\Ovo;
 use App\Models\RegistroHabito;
 use App\Models\User;
+use App\Models\XpDiario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
+/**
+ * Cenário: hoje é 2026-11-09; o dragão ativo nasceu em 2026-11-01 e os
+ * hábitos foram criados em 2026-11-02, salvo quando o teste diz outra coisa.
+ */
 class RegistroHabitoApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function habitoDe(User $usuario): Habito
+    private User $usuario;
+
+    private Dragao $dragao;
+
+    protected function setUp(): void
     {
-        return Habito::create([
+        parent::setUp();
+
+        $this->travelTo('2026-11-02 09:00:00');
+        $this->usuario = User::factory()->create();
+        $this->dragao = $this->dragaoAtivoDe($this->usuario);
+        $this->travelTo('2026-11-09 10:00:00');
+    }
+
+    private function dragaoAtivoDe(User $usuario, string $nascimento = '2026-11-01'): Dragao
+    {
+        $dragao = Dragao::create([
+            'fk_id_usuario' => $usuario->id,
+            'fk_id_ovo' => Ovo::create(['nome' => 'Ovo', 'imagem_url' => 'ovo.png'])->id,
+            'fk_id_estagio' => Estagio::create(['nome' => 'Ovo', 'ordem' => 1, 'xp_marco' => 0])->id,
+            'nome' => 'Smaug',
+            'xp_ciclo' => 0,
+            'status' => 'ATIVO',
+            'data_nascimento' => $nascimento,
+        ]);
+        $usuario->forceFill(['fk_id_dragao' => $dragao->id])->save();
+
+        return $dragao;
+    }
+
+    private function habitoDe(User $usuario, int $peso = 10, string $criadoEm = '2026-11-02 09:00:00'): Habito
+    {
+        $agora = now();
+        $this->travelTo($criadoEm);
+        $habito = Habito::create([
             'fk_id_usuario' => $usuario->id,
             'fk_id_categoria' => Categoria::create(['nome' => 'Geral'.uniqid()])->id,
             'nome' => 'Ler',
+            'peso' => $peso,
         ]);
+        $this->travelTo($agora);
+
+        return $habito;
+    }
+
+    /** @param array<string, mixed> $extra */
+    private function marcar(Habito $habito, string $data, array $extra = []): \Illuminate\Testing\TestResponse
+    {
+        return $this->postJson('/api/check-ins', [
+            'fk_id_habito' => $habito->id,
+            'data' => $data,
+            'checked' => true,
+            'status' => 'CONCLUIDO',
+            ...$extra,
+        ]);
+    }
+
+    private function desmarcar(Habito $habito, string $data): \Illuminate\Testing\TestResponse
+    {
+        return $this->postJson('/api/check-ins', ['fk_id_habito' => $habito->id, 'data' => $data, 'checked' => false]);
     }
 
     public function test_rotas_exigem_autenticacao(): void
     {
         $this->getJson('/api/check-ins')->assertUnauthorized();
+        $this->postJson('/api/check-ins', [])->assertUnauthorized();
     }
 
-    public function test_registra_check_in_em_habito_do_usuario(): void
+    public function test_marca_check_in_de_hoje_e_grava_o_xp_de_hoje(): void
     {
-        $usuario = User::factory()->create();
-        $habito = $this->habitoDe($usuario);
-        Sanctum::actingAs($usuario);
+        $habito = $this->habitoDe($this->usuario);
+        Sanctum::actingAs($this->usuario);
 
-        $this->postJson('/api/check-ins', [
-            'fk_id_habito' => $habito->id,
-            'data' => '2026-11-04',
-            'status' => 'CONCLUIDO',
-        ])
+        $this->marcar($habito, '2026-11-09')
             ->assertCreated()
             ->assertJsonPath('data.fk_id_habito', $habito->id)
-            ->assertJsonPath('data.data', '2026-11-04')
+            ->assertJsonPath('data.data', '2026-11-09')
             ->assertJsonPath('data.percentual', '100.00');
+
+        // O XP de hoje também fica gravado e é creditado na hora.
+        $this->assertDatabaseHas('xp_diario', ['data' => '2026-11-09', 'xp_ganho' => 25, 'fk_id_dragao' => $this->dragao->id]);
+        $this->assertSame(25, $this->usuario->refresh()->xp_vitalicio);
+        $this->assertSame(25, $this->dragao->refresh()->xp_ciclo);
+
+        $this->desmarcar($habito, '2026-11-09')->assertNoContent();
+        $this->assertDatabaseHas('xp_diario', ['data' => '2026-11-09', 'xp_ganho' => 0]);
+        $this->assertSame(0, $this->usuario->refresh()->xp_vitalicio);
+    }
+
+    public function test_marcar_de_novo_atualiza_o_check_in_do_mesmo_dia(): void
+    {
+        $habito = $this->habitoDe($this->usuario);
+        Sanctum::actingAs($this->usuario);
+
+        $id = $this->marcar($habito, '2026-11-09', ['status' => 'EM_ANDAMENTO', 'percentual' => 40])->assertCreated()->json('data.id');
+
+        $this->marcar($habito, '2026-11-09')
+            ->assertOk()
+            ->assertJsonPath('data.id', $id)
+            ->assertJsonPath('data.status', 'CONCLUIDO')
+            ->assertJsonPath('data.percentual', '40.00');
+
+        $this->assertDatabaseCount('registro_habito', 1);
+    }
+
+    public function test_marcar_dia_passado_recalcula_o_xp_e_soma_no_dragao_e_no_usuario(): void
+    {
+        $agua = $this->habitoDe($this->usuario, peso: 5);
+        $estudar = $this->habitoDe($this->usuario, peso: 15);
+        Sanctum::actingAs($this->usuario);
+
+        // 5 de 20 pontos de peso: 5/20 × 25 = 6,25 → 6 XP.
+        $this->marcar($agua, '2026-11-05')->assertCreated();
+        $this->assertDatabaseHas('xp_diario', ['fk_id_usuario' => $this->usuario->id, 'data' => '2026-11-05', 'xp_ganho' => 6, 'fk_id_dragao' => $this->dragao->id]);
+        $this->assertSame(6, $this->usuario->refresh()->xp_vitalicio);
+        $this->assertSame(6, $this->dragao->refresh()->xp_ciclo);
+
+        // Completa o dia: 25 XP; soma só a diferença (19).
+        $this->marcar($estudar, '2026-11-05')->assertCreated();
+        $this->assertDatabaseHas('xp_diario', ['data' => '2026-11-05', 'xp_ganho' => 25]);
+        $this->assertDatabaseCount('xp_diario', 1);
+        $this->assertSame(25, $this->usuario->refresh()->xp_vitalicio);
+        $this->assertSame(25, $this->dragao->refresh()->xp_ciclo);
+
+        // Marcar de novo o mesmo hábito não credita XP em dobro.
+        $this->marcar($estudar, '2026-11-05')->assertOk();
+        $this->assertSame(25, $this->usuario->refresh()->xp_vitalicio);
+    }
+
+    public function test_desmarcar_exclui_o_check_in_e_desconta_o_xp(): void
+    {
+        $habito = $this->habitoDe($this->usuario);
+        Sanctum::actingAs($this->usuario);
+
+        $this->marcar($habito, '2026-11-05')->assertCreated();
+        $this->assertSame(25, $this->usuario->refresh()->xp_vitalicio);
+
+        $this->desmarcar($habito, '2026-11-05')->assertNoContent();
+
+        $this->assertDatabaseCount('registro_habito', 0);
+        $this->assertDatabaseHas('xp_diario', ['data' => '2026-11-05', 'xp_ganho' => 0]);
+        $this->assertSame(0, $this->usuario->refresh()->xp_vitalicio);
+        $this->assertSame(0, $this->dragao->refresh()->xp_ciclo);
+
+        // Desmarcar o que não está marcado não falha.
+        $this->desmarcar($habito, '2026-11-05')->assertNoContent();
+    }
+
+    public function test_recusa_data_futura(): void
+    {
+        $habito = $this->habitoDe($this->usuario);
+        Sanctum::actingAs($this->usuario);
+
+        $this->marcar($habito, '2026-11-10')->assertUnprocessable()->assertJsonValidationErrors(['data']);
+        $this->desmarcar($habito, '2026-11-10')->assertUnprocessable()->assertJsonValidationErrors(['data']);
+        $this->assertDatabaseCount('registro_habito', 0);
+    }
+
+    public function test_recusa_data_anterior_ao_nascimento_do_dragao(): void
+    {
+        $habito = $this->habitoDe($this->usuario, criadoEm: '2026-10-01 09:00:00');
+        Sanctum::actingAs($this->usuario);
+
+        $this->marcar($habito, '2026-10-31')->assertUnprocessable()->assertJsonValidationErrors(['data']);
+        $this->assertDatabaseCount('registro_habito', 0);
+    }
+
+    public function test_data_anterior_a_criacao_do_habito_e_conflito(): void
+    {
+        $habito = $this->habitoDe($this->usuario, criadoEm: '2026-11-06 15:00:00');
+        Sanctum::actingAs($this->usuario);
+
+        $this->marcar($habito, '2026-11-05')->assertStatus(409)->assertJsonValidationErrors(['data']);
+        $this->desmarcar($habito, '2026-11-05')->assertStatus(409);
+
+        // No próprio dia da criação, pode.
+        $this->marcar($habito, '2026-11-06')->assertCreated();
+    }
+
+    public function test_criar_habito_reduz_o_xp_de_hoje_e_desativar_devolve(): void
+    {
+        $ler = $this->habitoDe($this->usuario, peso: 10);
+        Sanctum::actingAs($this->usuario);
+        $this->marcar($ler, '2026-11-09')->assertCreated();
+        $this->assertSame(25, $this->usuario->refresh()->xp_vitalicio);
+
+        // Um hábito novo de peso 10 entra no total de hoje: 10/20 × 25 = 12,5 → 13 XP.
+        $novo = $this->postJson('/api/habits', [
+            'fk_id_categoria' => Categoria::create(['nome' => 'Saúde'])->id,
+            'nome' => 'Correr',
+            'polaridade' => 'BOM',
+            'tipo_meta' => 'REALIZACAO',
+            'frequencia' => 'DIARIA',
+            'dia_frequencia' => null,
+            'peso' => 10,
+        ])->assertCreated()->json('data.id');
+
+        $this->assertDatabaseHas('xp_diario', ['data' => '2026-11-09', 'xp_ganho' => 13]);
+        $this->assertSame(13, $this->usuario->refresh()->xp_vitalicio);
+        $this->assertSame(13, $this->dragao->refresh()->xp_ciclo);
+
+        // Desativar o hábito novo o tira do total: volta a 25 XP.
+        $this->deleteJson("/api/habits/{$novo}")->assertNoContent();
+        $this->assertDatabaseHas('xp_diario', ['data' => '2026-11-09', 'xp_ganho' => 25]);
+        $this->assertSame(25, $this->usuario->refresh()->xp_vitalicio);
+        $this->assertSame(25, $this->dragao->refresh()->xp_ciclo);
+    }
+
+    public function test_criar_habito_sem_dragao_ativo_nao_grava_xp(): void
+    {
+        $semDragao = User::factory()->create();
+        Sanctum::actingAs($semDragao);
+
+        $this->postJson('/api/habits', [
+            'fk_id_categoria' => Categoria::create(['nome' => 'Saúde'])->id,
+            'nome' => 'Correr',
+            'polaridade' => 'BOM',
+            'tipo_meta' => 'REALIZACAO',
+            'frequencia' => 'DIARIA',
+            'dia_frequencia' => null,
+            'peso' => 10,
+        ])->assertCreated();
+
+        $this->assertDatabaseCount('xp_diario', 0);
+    }
+
+    public function test_usuario_sem_dragao_ativo_nao_registra_check_in(): void
+    {
+        $semDragao = User::factory()->create();
+        $habito = $this->habitoDe($semDragao);
+        Sanctum::actingAs($semDragao);
+
+        $this->marcar($habito, '2026-11-09')->assertUnprocessable()->assertJsonValidationErrors(['fk_id_habito']);
     }
 
     public function test_nao_registra_check_in_em_habito_de_outro_usuario(): void
     {
         $habitoAlheio = $this->habitoDe(User::factory()->create());
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs($this->usuario);
 
-        $this->postJson('/api/check-ins', [
-            'fk_id_habito' => $habitoAlheio->id,
-            'data' => '2026-11-04',
-            'status' => 'CONCLUIDO',
-        ])->assertUnprocessable()->assertJsonValidationErrors(['fk_id_habito']);
+        $this->marcar($habitoAlheio, '2026-11-09')->assertUnprocessable()->assertJsonValidationErrors(['fk_id_habito']);
     }
 
-    public function test_valida_status_data_e_percentual(): void
+    public function test_valida_checked_status_data_e_percentual(): void
     {
-        $usuario = User::factory()->create();
-        $habito = $this->habitoDe($usuario);
-        Sanctum::actingAs($usuario);
+        $habito = $this->habitoDe($this->usuario);
+        Sanctum::actingAs($this->usuario);
+
+        $this->postJson('/api/check-ins', ['fk_id_habito' => $habito->id, 'data' => '2026-11-09'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['checked']);
 
         $this->postJson('/api/check-ins', [
             'fk_id_habito' => $habito->id,
-            'data' => '04/11/2026',
+            'data' => '09/11/2026',
+            'checked' => true,
             'status' => 'ESTRANHO',
             'percentual' => 150,
         ])->assertUnprocessable()->assertJsonValidationErrors(['data', 'status', 'percentual']);
+
+        // Ao desmarcar, o status não é exigido.
+        $this->desmarcar($habito, '2026-11-09')->assertNoContent();
     }
 
-    public function test_lista_apenas_check_ins_do_usuario(): void
+    public function test_lista_e_mostra_apenas_check_ins_do_usuario(): void
     {
-        $eu = User::factory()->create();
-        $outro = User::factory()->create();
-        $meuHabito = $this->habitoDe($eu);
-        $meu = RegistroHabito::create(['fk_id_habito' => $meuHabito->id, 'data' => '2026-11-04', 'status' => 'CONCLUIDO']);
-        RegistroHabito::create(['fk_id_habito' => $this->habitoDe($outro)->id, 'data' => '2026-11-04', 'status' => 'CONCLUIDO']);
+        $meu = RegistroHabito::create(['fk_id_habito' => $this->habitoDe($this->usuario)->id, 'data' => '2026-11-04', 'status' => 'CONCLUIDO']);
+        $alheio = RegistroHabito::create(['fk_id_habito' => $this->habitoDe(User::factory()->create())->id, 'data' => '2026-11-04', 'status' => 'CONCLUIDO']);
+        Sanctum::actingAs($this->usuario);
 
-        Sanctum::actingAs($eu);
-
-        $this->getJson('/api/check-ins')
-            ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $meu->id);
+        $this->getJson('/api/check-ins')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $meu->id);
+        $this->getJson("/api/check-ins/{$meu->id}")->assertOk();
+        $this->getJson("/api/check-ins/{$alheio->id}")->assertNotFound();
     }
 
-    public function test_nao_acessa_check_in_de_outro_usuario(): void
+    public function test_check_in_nao_tem_put_nem_delete(): void
     {
-        $outro = User::factory()->create();
-        $registro = RegistroHabito::create([
-            'fk_id_habito' => $this->habitoDe($outro)->id,
-            'data' => '2026-11-04',
-            'status' => 'CONCLUIDO',
-        ]);
+        $registro = RegistroHabito::create(['fk_id_habito' => $this->habitoDe($this->usuario)->id, 'data' => '2026-11-04', 'status' => 'EM_ANDAMENTO']);
+        Sanctum::actingAs($this->usuario);
 
-        Sanctum::actingAs(User::factory()->create());
+        $this->putJson("/api/check-ins/{$registro->id}", ['status' => 'CONCLUIDO'])->assertMethodNotAllowed();
+        $this->patchJson("/api/check-ins/{$registro->id}", ['status' => 'CONCLUIDO'])->assertMethodNotAllowed();
+        $this->deleteJson("/api/check-ins/{$registro->id}")->assertMethodNotAllowed();
 
-        $this->getJson("/api/check-ins/{$registro->id}")->assertNotFound();
-        $this->putJson("/api/check-ins/{$registro->id}", ['status' => 'NAO_CONCLUIDO'])->assertNotFound();
-        $this->deleteJson("/api/check-ins/{$registro->id}")->assertNotFound();
-
-        $this->assertDatabaseHas('registro_habito', ['id' => $registro->id, 'status' => 'CONCLUIDO']);
+        $this->assertDatabaseHas('registro_habito', ['id' => $registro->id, 'status' => 'EM_ANDAMENTO']);
     }
 
-    public function test_atualiza_status_e_nao_troca_o_habito(): void
+    public function test_indice_de_habito_e_data_existe(): void
     {
-        $usuario = User::factory()->create();
-        $habito = $this->habitoDe($usuario);
-        $outroHabito = $this->habitoDe($usuario);
-        $registro = RegistroHabito::create(['fk_id_habito' => $habito->id, 'data' => '2026-11-04', 'status' => 'EM_ANDAMENTO']);
-        Sanctum::actingAs($usuario);
-
-        $this->putJson("/api/check-ins/{$registro->id}", [
-            'status' => 'CONCLUIDO',
-            'fk_id_habito' => $outroHabito->id,
-        ])
-            ->assertOk()
-            ->assertJsonPath('data.status', 'CONCLUIDO')
-            ->assertJsonPath('data.fk_id_habito', $habito->id);
-    }
-
-    public function test_exclui_check_in_do_usuario(): void
-    {
-        $usuario = User::factory()->create();
-        $registro = RegistroHabito::create([
-            'fk_id_habito' => $this->habitoDe($usuario)->id,
-            'data' => '2026-11-04',
-            'status' => 'CONCLUIDO',
-        ]);
-        Sanctum::actingAs($usuario);
-
-        $this->deleteJson("/api/check-ins/{$registro->id}")->assertNoContent();
-        $this->assertDatabaseMissing('registro_habito', ['id' => $registro->id]);
+        $this->assertTrue(Schema::hasIndex('registro_habito', ['fk_id_habito', 'data']));
     }
 }

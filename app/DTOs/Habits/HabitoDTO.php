@@ -4,14 +4,13 @@ namespace App\DTOs\Habits;
 
 use App\DTOs\DTO;
 use App\Enums\DiaSemana;
-use App\Enums\Dificuldade;
 use App\Enums\Frequencia;
 use App\Enums\Polaridade;
 use App\Enums\TipoMeta;
 
 /**
- * O peso e a data de criação não fazem parte da entrada: o peso é gerado
- * pela dificuldade (HabitoService) e o created_at, pelo banco.
+ * A dificuldade e a data de criação não fazem parte da entrada: a dificuldade
+ * é gerada pelo peso (HabitoService) e o created_at, pelo banco.
  */
 final readonly class HabitoDTO extends DTO
 {
@@ -24,7 +23,7 @@ final readonly class HabitoDTO extends DTO
         public int|DiaSemana|null $diaFrequencia = null,
         public ?float $valorMeta = null,
         public ?string $unidade = null,
-        public ?Dificuldade $dificuldade = null,
+        public ?int $peso = null,
         public ?bool $ativo = null,
     ) {}
 
@@ -40,7 +39,7 @@ final readonly class HabitoDTO extends DTO
             diaFrequencia: self::diaFrequencia($dados),
             valorMeta: self::decimal($dados, 'valor_meta'),
             unidade: self::texto($dados, 'unidade'),
-            dificuldade: self::enum($dados, 'dificuldade', Dificuldade::class),
+            peso: self::inteiro($dados, 'peso'),
             ativo: self::booleano($dados, 'ativo'),
         );
     }
@@ -72,7 +71,7 @@ final readonly class HabitoDTO extends DTO
             'dia_frequencia' => $this->diaFrequencia instanceof DiaSemana ? $this->diaFrequencia->value : $this->diaFrequencia,
             'valor_meta' => $this->valorMeta,
             'unidade' => $this->unidade,
-            'dificuldade' => $this->dificuldade?->value,
+            'peso' => $this->peso,
             'ativo' => $this->ativo,
         ]);
     }

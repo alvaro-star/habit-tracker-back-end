@@ -20,27 +20,32 @@ class RegistroHabitoController extends Controller
         return RegistroHabitoResource::collection($this->service->listarDoUsuario($request->user()->id));
     }
 
-    /** A posse do hábito informado é validada na RegistroHabitoRequest. */
-    public function store(RegistroHabitoRequest $request): JsonResponse
+    /**
+     * Marca ou desmarca um hábito no dia.
+     *
+     * Com `checked: true`, cria o check-in do hábito no dia (201) ou atualiza o que já
+     * existe para o mesmo `fk_id_habito` + `data` (200). Com `checked: false`, exclui o
+     * check-in do dia (204). Não há PUT nem DELETE: o POST é a única forma de gravar.
+     *
+     * A data não pode ser futura nem anterior ao nascimento do dragão ativo (422), e não
+     * pode ser anterior à criação do hábito (409). Se a data é anterior a hoje, o XP daquele
+     * dia é recalculado e a diferença é somada ao XP do dragão ativo e ao XP vitalício.
+     */
+    public function store(RegistroHabitoRequest $request): JsonResponse|Response
     {
-        return (new RegistroHabitoResource($this->service->criar($request->toDto())))
-            ->response()->setStatusCode(Response::HTTP_CREATED);
+        $registro = $this->service->registrar($request->user(), $request->toDto());
+
+        if ($registro === null) {
+            return response()->noContent();
+        }
+
+        return (new RegistroHabitoResource($registro))
+            ->response()
+            ->setStatusCode($registro->wasRecentlyCreated ? Response::HTTP_CREATED : Response::HTTP_OK);
     }
 
     public function show(Request $request, int $id): RegistroHabitoResource
     {
         return new RegistroHabitoResource($this->service->buscarDoUsuario($request->user()->id, $id));
-    }
-
-    public function update(RegistroHabitoRequest $request, int $id): RegistroHabitoResource
-    {
-        return new RegistroHabitoResource($this->service->atualizarDoUsuario($request->user()->id, $id, $request->toDto()));
-    }
-
-    public function destroy(Request $request, int $id): Response
-    {
-        $this->service->excluirDoUsuario($request->user()->id, $id);
-
-        return response()->noContent();
     }
 }
