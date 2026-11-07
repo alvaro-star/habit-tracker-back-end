@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\DiaSemana;
-use App\Enums\Frequencia;
 use App\Enums\StatusRegistro;
 use App\Models\Habito;
 use App\Models\RegistroHabito;
@@ -106,9 +105,10 @@ class XpDiarioService extends BaseService
      * XP do dia (ESCOPO.md, seção 3.3): XP = (∑W cumpridos / ∑W total) × teto diário.
      *
      * Calcula de forma dinâmica para qualquer dia. O ∑W total é a soma dos pesos
-     * dos hábitos ativos do dia que já existiam na data (criados até ela), sem
-     * os semanais, que o escopo apura num pool próprio ao fim da semana. O ∑W
-     * cumpridos vem de pesoRealizadoDoDia(). O XP é arredondado para inteiro,
+     * dos hábitos ativos que já existiam na data (criados até ela) e que caem
+     * naquele dia, seja qual for a frequência: todos os diários, os semanais do
+     * dia da semana da data e os mensais do dia do mês. Não há pool semanal: o
+     * que conta é o cumprimento do dia. O ∑W cumpridos vem de pesoRealizadoDoDia(). O XP é arredondado para inteiro,
      * como a coluna xp_diario.xp_ganho.
      *
      * @return array{
@@ -125,9 +125,7 @@ class XpDiarioService extends BaseService
     {
         // TODO: desconsiderar os hábitos desativados no período só a partir do inactivated_at
         // (ver HabitoRepository::ativosDoUsuarioNoDia), em vez de tirá-los de todos os dias.
-        $habitos = $this->habitos->ativosDoUsuarioNoDia($usuarioId, $data, DiaSemana::daData($data))
-            ->reject(fn (Habito $habito) => $habito->frequencia === Frequencia::SEMANAL->value)
-            ->values();
+        $habitos = $this->habitos->ativosDoUsuarioNoDia($usuarioId, $data, DiaSemana::daData($data));
 
         $pesoTotal = (int) $habitos->sum('peso');
         $realizado = $this->pesoRealizadoDoDia($habitos, $data);
