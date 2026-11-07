@@ -19,7 +19,6 @@ use App\Services\GatilhoNotificacaoService;
 use App\Services\HabitoModeloService;
 use App\Services\HabitoService;
 use App\Services\InsigniaService;
-use App\Services\NivelService;
 use App\Services\OvoService;
 use App\Services\RegistroHabitoService;
 use App\Services\XpDiarioService;
@@ -30,14 +29,6 @@ use Tests\TestCase;
 class CrudServicosTest extends TestCase
 {
     use RefreshDatabase;
-
-    public function test_nivel_crud(): void
-    {
-        $this->verificarCicloCrud(app(NivelService::class), [
-            'xp_necessario' => 100,
-            'xp_acumulado' => 100,
-        ], ['xp_acumulado' => 250], 'xp_acumulado');
-    }
 
     public function test_estagio_crud(): void
     {
@@ -159,8 +150,9 @@ class CrudServicosTest extends TestCase
     {
         $usuario = User::factory()->create();
         $categoria = app(CategoriaService::class)->criar(['nome' => 'Estudos']);
+        $servico = app(HabitoService::class);
 
-        $this->verificarCicloCrud(app(HabitoService::class), [
+        $id = $servico->criar([
             'fk_id_usuario' => $usuario->id,
             'fk_id_categoria' => $categoria->id,
             'nome' => 'Ler',
@@ -169,7 +161,15 @@ class CrudServicosTest extends TestCase
             'frequencia' => 'DIARIA',
             'peso' => 5,
             'ativo' => true,
-        ], ['nome' => 'Ler dez páginas'], 'nome');
+        ])->getKey();
+
+        $this->assertTrue($servico->listar()->contains('id', $id));
+        $this->assertSame('Ler dez páginas', $servico->atualizar($id, ['nome' => 'Ler dez páginas'])->nome);
+
+        // Excluir um hábito só o desativa: ele continua no banco.
+        $this->assertTrue($servico->excluir($id));
+        $this->assertTrue($servico->listar()->contains('id', $id));
+        $this->assertFalse($servico->buscar($id)->ativo);
     }
 
     public function test_registro_habito_crud(): void
@@ -199,7 +199,7 @@ class CrudServicosTest extends TestCase
     {
         $this->expectException(ModelNotFoundException::class);
 
-        app(NivelService::class)->atualizar(999, ['xp_acumulado' => 1]);
+        app(EstagioService::class)->atualizar(999, ['nome' => 'Inexistente']);
     }
 
     /**

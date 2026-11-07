@@ -4,6 +4,7 @@ namespace Tests\Feature\Habits;
 
 use App\Models\Categoria;
 use App\Models\Habito;
+use App\Models\RegistroHabito;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -168,19 +169,33 @@ class HabitoApiTest extends TestCase
             ->assertJsonValidationErrors(['peso']);
     }
 
-    public function test_post_ignora_dificuldade_e_created_at_informados(): void
+    public function test_post_ignora_a_dificuldade_informada(): void
     {
-        $usuario = User::factory()->create();
-        Sanctum::actingAs($usuario);
+        Sanctum::actingAs(User::factory()->create());
 
-        $resposta = $this->postJson('/api/habits', $this->payload([
-            'peso' => 8,
-            'dificuldade' => 'MUITO_DIFICIL',
-            'created_at' => '2020-01-01 00:00:00',
-        ]))->assertCreated()->assertJsonPath('data.dificuldade', 'MEDIO');
+        $this->postJson('/api/habits', $this->payload(['peso' => 8, 'dificuldade' => 'MUITO_DIFICIL']))
+            ->assertCreated()
+            ->assertJsonPath('data.dificuldade', 'MEDIO');
+    }
 
-        $this->assertNotNull($resposta->json('data.created_at'));
-        $this->assertStringStartsNotWith('2020-01-01', $resposta->json('data.created_at'));
+    public function test_created_at_vem_do_timestamp_e_nao_pode_ser_enviado(): void
+    {
+        $this->travelTo('2026-11-09 08:30:00');
+        Sanctum::actingAs(User::factory()->create());
+
+        foreach (['created_at', 'data_criacao'] as $campo) {
+            $this->postJson('/api/habits', $this->payload([$campo => '2020-01-01 00:00:00']))
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors([$campo]);
+        }
+        $this->assertDatabaseCount('habito', 0);
+
+        $resposta = $this->postJson('/api/habits', $this->payload())->assertCreated();
+        $this->assertStringStartsWith('2026-11-09T08:30:00', $resposta->json('data.created_at'));
+
+        $this->putJson('/api/habits/'.$resposta->json('data.id'), ['created_at' => '2020-01-01 00:00:00'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['created_at']);
     }
 
     public function test_put_nao_altera_dificuldade_nem_created_at(): void
@@ -189,11 +204,35 @@ class HabitoApiTest extends TestCase
         Sanctum::actingAs($usuario);
         $habito = $this->postJson('/api/habits', $this->payload(['peso' => 15]))->json('data');
 
-        $this->putJson("/api/habits/{$habito['id']}", ['dificuldade' => 'FACIL', 'created_at' => '2020-01-01 00:00:00'])
+        $this->putJson("/api/habits/{$habito['id']}", ['dificuldade' => 'FACIL', 'nome' => 'Outro nome'])
             ->assertOk()
             ->assertJsonPath('data.peso', 15)
             ->assertJsonPath('data.dificuldade', 'DIFICIL')
             ->assertJsonPath('data.created_at', $habito['created_at']);
+    }
+
+    public function test_tipo_de_meta_so_muda_sem_check_ins(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        $id = $this->postJson('/api/habits', $this->payload(['tipo_meta' => 'REALIZACAO']))->json('data.id');
+
+        // Sem check-ins, pode mudar.
+        $this->patchJson("/api/habits/{$id}", ['tipo_meta' => 'TEMPO'])
+            ->assertOk()
+            ->assertJsonPath('data.tipo_meta', 'TEMPO');
+
+        RegistroHabito::create(['fk_id_habito' => $id, 'data' => '2026-11-07', 'status' => 'CONCLUIDO']);
+
+        // Com check-in, mudar o tipo de meta devolve 422.
+        $this->patchJson("/api/habits/{$id}", ['tipo_meta' => 'QUANTIDADE'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['tipo_meta']);
+        $this->assertDatabaseHas('habito', ['id' => $id, 'tipo_meta' => 'TEMPO']);
+
+        // Reenviar o mesmo tipo de meta, ou editar outros campos, continua permitido.
+        $this->patchJson("/api/habits/{$id}", ['tipo_meta' => 'TEMPO', 'nome' => 'Ler 30 minutos'])
+            ->assertOk()
+            ->assertJsonPath('data.nome', 'Ler 30 minutos');
     }
 
     public function test_cria_habitos_semanal_e_mensal_com_dia_frequencia(): void
@@ -389,8 +428,28 @@ class HabitoApiTest extends TestCase
         $this->getJson('/api/habits/daily?data=2028-02-29')->assertOk();
     }
 
-    public function test_exclui_habito_do_usuario(): void
+    public function test_nao_exclui_habito_criado_antes_de_hoje(): void
     {
+        $usuario = User::factory()->create();
+        $this->travelTo('2026-11-08 20:00:00');
+        $habito = Habito::create([
+            'fk_id_usuario' => $usuario->id,
+            'fk_id_categoria' => Categoria::create(['nome' => 'Geral'])->id,
+            'nome' => 'Ler',
+        ]);
+        $this->travelTo('2026-11-09 08:00:00');
+        Sanctum::actingAs($usuario);
+
+        $this->deleteJson("/api/habits/{$habito->id}")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['id']);
+
+        $this->assertDatabaseHas('habito', ['id' => $habito->id, 'ativo' => true, 'inactivated_at' => null]);
+    }
+
+    public function test_excluir_grava_inactivated_at_e_reativar_limpa(): void
+    {
+        $this->travelTo('2026-11-09 08:00:00');
         $usuario = User::factory()->create();
         $habito = Habito::create([
             'fk_id_usuario' => $usuario->id,
@@ -399,7 +458,42 @@ class HabitoApiTest extends TestCase
         ]);
         Sanctum::actingAs($usuario);
 
+        $this->travelTo('2026-11-09 18:30:00');
         $this->deleteJson("/api/habits/{$habito->id}")->assertNoContent();
-        $this->assertDatabaseMissing('habito', ['id' => $habito->id]);
+        $this->getJson("/api/habits/{$habito->id}")
+            ->assertJsonPath('data.ativo', false)
+            ->assertJsonPath('data.inactivated_at', '2026-11-09T18:30:00.000000Z');
+
+        $this->patchJson("/api/habits/{$habito->id}", ['ativo' => true])
+            ->assertOk()
+            ->assertJsonPath('data.inactivated_at', null);
+
+        // Desativar pelo PATCH também guarda a data.
+        $this->patchJson("/api/habits/{$habito->id}", ['ativo' => false])
+            ->assertOk()
+            ->assertJsonPath('data.inactivated_at', '2026-11-09T18:30:00.000000Z');
+    }
+
+    public function test_excluir_desativa_o_habito_sem_apagar_o_registro(): void
+    {
+        $usuario = User::factory()->create();
+        $habito = Habito::create([
+            'fk_id_usuario' => $usuario->id,
+            'fk_id_categoria' => Categoria::create(['nome' => 'Geral'])->id,
+            'nome' => 'Ler',
+        ]);
+        $checkIn = RegistroHabito::create(['fk_id_habito' => $habito->id, 'data' => '2026-11-07', 'status' => 'CONCLUIDO']);
+        Sanctum::actingAs($usuario);
+
+        $this->deleteJson("/api/habits/{$habito->id}")->assertNoContent();
+
+        $this->assertDatabaseHas('habito', ['id' => $habito->id, 'ativo' => false]);
+        $this->assertDatabaseHas('registro_habito', ['id' => $checkIn->id]);
+        $this->getJson("/api/habits/{$habito->id}")->assertOk()->assertJsonPath('data.ativo', false);
+        $this->getJson('/api/habits/daily')->assertOk()->assertJsonCount(0, 'data');
+
+        // Excluir de novo não falha, e o hábito pode ser reativado.
+        $this->deleteJson("/api/habits/{$habito->id}")->assertNoContent();
+        $this->patchJson("/api/habits/{$habito->id}", ['ativo' => true])->assertOk()->assertJsonPath('data.ativo', true);
     }
 }

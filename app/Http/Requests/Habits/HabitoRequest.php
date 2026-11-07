@@ -39,6 +39,20 @@ class HabitoRequest extends ApiRequest
             'unidade' => ['nullable', 'string', 'max:20'],
             'peso' => [$obrigatorio, 'integer', 'min:'.Dificuldade::PESO_MINIMO, 'max:'.Dificuldade::PESO_MAXIMO],
             'ativo' => ['sometimes', 'boolean'],
+            // A data de criação é gravada pelo timestamp do banco: não pode ser enviada, com nenhum dos dois nomes.
+            'created_at' => ['prohibited'],
+            'data_criacao' => ['prohibited'],
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        $mensagem = 'A data de criação do hábito é definida pelo sistema e não pode ser enviada.';
+
+        return [
+            'created_at.prohibited' => $mensagem,
+            'data_criacao.prohibited' => $mensagem,
         ];
     }
 

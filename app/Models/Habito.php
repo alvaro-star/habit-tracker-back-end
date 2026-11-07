@@ -25,6 +25,8 @@ class Habito extends Model
         'dificuldade',
         'peso',
         'ativo',
+        // Preenchido pelo HabitoService ao desativar o hábito; não vem da requisição.
+        'inactivated_at',
     ];
 
     /** @return array<string, string> */
@@ -32,6 +34,7 @@ class Habito extends Model
     {
         return [
             'ativo' => 'boolean',
+            'inactivated_at' => 'datetime',
             'valor_meta' => 'decimal:2',
         ];
     }

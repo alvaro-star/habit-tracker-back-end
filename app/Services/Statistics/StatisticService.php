@@ -73,6 +73,8 @@ class StatisticService
                     ->whereBetween('registro_habito.data', [$start, $end]);
             })
             ->where('habito.fk_id_usuario', $userId)
+            // TODO: desconsiderar os hábitos desativados no período só a partir do inactivated_at,
+            // em vez de tirar do progresso todo hábito inativo (inclusive nos dias em que estava ativo).
             ->where('habito.ativo', true)
             ->select(
                 'categoria.id as categoria_id',
