@@ -30,7 +30,9 @@ O `phpunit.xml` força SQLite em memória, então os testes nunca tocam no Postg
 
 ## Arquitetura
 
-Fluxo da requisição: **rota → Form Request → controller → service → model → banco de dados**, com as respostas formatadas por API Resources. Os controllers são finos (entrada validada via `$request->validated()`, delegam para um service, devolvem um Resource, nunca um model). Os dados de hábitos pertencem ao usuário: filtre as queries pelo usuário autenticado.
+Fluxo da requisição: **rota → Form Request → DTO → controller → service → repository → model → banco de dados**, com as respostas formatadas por API Resources. Os controllers são finos (passam `$request->toDto()` para um service e devolvem um Resource, nunca um model). Os dados pessoais pertencem ao usuário: filtre as queries pelo usuário autenticado (`BaseService::listarDoUsuario()` e afins).
+
+Os **DTOs** (`app/DTOs/<Modulo>`, `final readonly class` que estende `App\DTOs\DTO`) representam os dados vindos da requisição com os tipos do PHP (enums, `CarbonImmutable`, `int`, `float`, `bool`). Cada Form Request estende `App\Http\Requests\ApiRequest` e implementa `toDto()`, que chama `XxxDTO::fromArray($this->validated())`. O `toArray()` do DTO devolve as colunas do banco sem os campos `null`, o que permite PATCH parcial.
 
 O `bootstrap/app.php` já renderiza todas as exceções (inclusive erros de validação) como JSON em `api/*`: não adicione formatação de erros nos controllers.
 
@@ -54,11 +56,13 @@ Onde cada coisa fica:
 | Camada | Pasta | Exemplo (MOD3) |
 |---|---|---|
 | Rotas | `routes/api/<modulo>.php`, carregado por `routes/api.php` | `routes/api/habits.php` |
-| Form Requests | `app/Http/Requests/<Modulo>` | `Habits/StoreHabitRequest.php` |
-| Controllers | `app/Http/Controllers/Api/<Modulo>` | `Api/Habits/HabitController.php` |
-| Services | `app/Services/<Modulo>` | `Habits/HabitService.php` |
-| Resources | `app/Http/Resources/<Modulo>` | `Habits/HabitResource.php` |
-| Models | `app/Models` (sem subpastas, compartilhados entre módulos) | `Habit.php` |
+| Form Requests | `app/Http/Requests/<Modulo>` (uma por entidade, para POST e PUT/PATCH) | `Habits/HabitoRequest.php` |
+| DTOs | `app/DTOs/<Modulo>` | `Habits/HabitoDTO.php` |
+| Controllers | `app/Http/Controllers/Api/<Modulo>` | `Api/Habits/HabitoController.php` |
+| Services | `app/Services` (estendem `BaseService`) | `HabitoService.php` |
+| Repositories | `app/Repositories` (estendem `BaseRepository`) | `HabitoRepository.php` |
+| Resources | `app/Http/Resources/<Modulo>` | `Habits/HabitoResource.php` |
+| Models | `app/Models` (sem subpastas, compartilhados entre módulos) | `Habito.php` |
 | Migrations, factories, seeders | pastas padrão de `database/` | `create_habits_table` |
 | Testes | `tests/Feature/<Modulo>` | `Habits/HabitTest.php` |
 
@@ -68,7 +72,7 @@ Regras:
 - Os nomes de pastas, classes e rotas seguem as convenções do Laravel, em inglês. As tabelas de `docs/DER.md` estão em português e são mapeadas para esses models (ex.: `habito` → `Habit`).
 - O MOD8 também usa `app/Notifications` e `app/Jobs`, com o agendamento em `routes/console.php`.
 
-Estado atual: nenhum desses módulos foi construído. Só existe `User` e um `Api/AuthController.php` **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum). Ao implementar o MOD1, substitua o mock e mova-o para `Api/Auth/`, com as rotas em `routes/api/auth.php`. As pastas por módulo ainda não existem: crie-as junto com o primeiro arquivo de cada uma, ex.: `make:model Habit -mfs`, `make:controller Api/Habits/HabitController --api --model=Habit`, `make:request Habits/StoreHabitRequest`, `make:resource Habits/HabitResource`.
+Estado atual: todas as tabelas do DER têm model, repository e service, e cada service tem um controller com CRUD (`apiResource`, parâmetro `{id}`) no prefixo do seu módulo, documentado no Swagger em `/docs/api`. Faltam as regras de negócio dos módulos e a autenticação real: o `Api/AuthController.php` ainda é um **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum). Ao implementar o MOD1, substitua o mock e mova-o para `Api/Auth/`, com as rotas em `routes/api/auth.php`.
 
 ## Documentação
 
