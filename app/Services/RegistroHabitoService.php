@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\DTOs\CheckIns\RegistroHabitoDTO;
+use App\Enums\StatusRegistro;
+use App\Enums\TipoMeta;
 use App\Exceptions\RegraDeNegocioException;
 use App\Models\Habito;
 use App\Models\RegistroHabito;
@@ -30,7 +32,8 @@ class RegistroHabitoService extends BaseService
      * Antes de gravar, confere a data do DTO: ela não pode ser anterior ao
      * nascimento do dragão ativo do usuário (422) nem futura (422), e não pode
      * ser anterior à criação do hábito (409). Com checked = true, o check-in do
-     * hábito no dia é criado ou atualizado; com checked = false, é excluído.
+     * hábito no dia é criado ou atualizado, com o status e o percentual
+     * definidos pelo tipo de meta (comCumprimento); com checked = false, é excluído.
      * Nos dois casos, o XP daquele dia (passado ou hoje) é recalculado e gravado,
      * e a diferença vai para o dragão e para o usuário.
      *
@@ -47,12 +50,12 @@ class RegistroHabitoService extends BaseService
         $habito = $this->habitos->buscarDoUsuarioOuFalhar($usuario->id, $dto->habitoId);
         $this->validarData($usuario, $habito, $data, $hoje);
 
-        return DB::transaction(function () use ($usuario, $dto, $data) {
+        return DB::transaction(function () use ($usuario, $habito, $dto, $data) {
             $existente = $this->repositorio->doHabitoNoDia($dto->habitoId, $data->toDateString());
             $registro = null;
 
             if ($dto->checked) {
-                $dados = $dto->toArray();
+                $dados = $this->comCumprimento($habito, $dto->toArray());
                 /** @var RegistroHabito $registro */
                 $registro = $existente === null
                     ? $this->repositorio->criar($dados)
@@ -66,6 +69,44 @@ class RegistroHabitoService extends BaseService
 
             return $registro;
         });
+    }
+
+    /**
+     * Define o status e o percentual do check-in pelo tipo de meta do hábito.
+     *
+     * - REALIZACAO: vale o status enviado (sem status, NAO_CONCLUIDO). CONCLUIDO
+     *   grava 100% e NAO_CONCLUIDO, 0%; EM_ANDAMENTO usa o percentual enviado.
+     * - TEMPO e QUANTIDADE: o status enviado é ignorado; o valor_realizado
+     *   (minutos ou quantidade) é comparado com o valor_meta do hábito. Nulo ou
+     *   zero → NAO_CONCLUIDO (0%); igual ou acima da meta → CONCLUIDO (100%);
+     *   abaixo da meta → EM_ANDAMENTO, com o percentual proporcional. Sem
+     *   valor_meta no hábito, qualquer valor acima de zero conclui o hábito.
+     *
+     * @param  array<string, mixed>  $dados
+     * @return array<string, mixed>
+     */
+    private function comCumprimento(Habito $habito, array $dados): array
+    {
+        if (TipoMeta::from($habito->tipo_meta) === TipoMeta::REALIZACAO) {
+            $status = StatusRegistro::from($dados['status'] ?? StatusRegistro::NAO_CONCLUIDO->value);
+
+            return [...$dados, 'status' => $status->value, ...match ($status) {
+                StatusRegistro::CONCLUIDO => ['percentual' => 100],
+                StatusRegistro::NAO_CONCLUIDO => ['percentual' => 0],
+                StatusRegistro::EM_ANDAMENTO => [],
+            }];
+        }
+
+        $valor = isset($dados['valor_realizado']) ? (float) $dados['valor_realizado'] : null;
+        $meta = $habito->valor_meta !== null ? (float) $habito->valor_meta : null;
+
+        [$status, $percentual] = match (true) {
+            $valor === null || $valor <= 0 => [StatusRegistro::NAO_CONCLUIDO, 0],
+            $meta === null || $meta <= 0 || $valor >= $meta => [StatusRegistro::CONCLUIDO, 100],
+            default => [StatusRegistro::EM_ANDAMENTO, round($valor / $meta * 100, 2)],
+        };
+
+        return [...$dados, 'valor_realizado' => $valor, 'status' => $status->value, 'percentual' => $percentual];
     }
 
     /** @throws RegraDeNegocioException */
