@@ -10,17 +10,23 @@ Este repositório é o **back-end** do Habit Tracker, um sistema para gerenciar 
 
 ```bash
 composer test                                # config:clear + php artisan test
-php artisan test --filter=HabitTest          # uma classe/método de teste
+php artisan test --filter=HabitoApiTest      # uma classe/método de teste
 vendor/bin/pint --dirty                      # formata os arquivos PHP alterados
 php artisan serve                            # API em http://localhost:8000
 composer dev                                 # php artisan dev (servidor + fila + logs + vite)
 ```
 
-Os testes são **PHPUnit, não Pest**: crie com `php artisan make:test Habits/HabitTest --phpunit`.
+Os testes são **PHPUnit, não Pest**: crie com `php artisan make:test Habits/HabitoApiTest --phpunit`. O trait `tests/Concerns/VerificaCrudDaApi` percorre o CRUD completo de um recurso.
 
 ## Cuidado com os testes
 
 O `phpunit.xml` força SQLite em memória, então os testes nunca tocam no Postgres. Evite SQL exclusivo do Postgres nas migrations e queries, ou a suíte de testes quebra.
+
+Se o PHP local não tiver o driver `pdo_sqlite` (erro `could not find driver`), rode os testes na imagem do projeto:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/app -w /app --entrypoint php habittracker-app:latest artisan test --compact
+```
 
 ## Banco de dados
 
@@ -35,6 +41,18 @@ Fluxo da requisição: **rota → Form Request → DTO → controller → servic
 Os **DTOs** (`app/DTOs/<Modulo>`, `final readonly class` que estende `App\DTOs\DTO`) representam os dados vindos da requisição com os tipos do PHP (enums, `CarbonImmutable`, `int`, `float`, `bool`). Cada Form Request estende `App\Http\Requests\ApiRequest` e implementa `toDto()`, que chama `XxxDTO::fromArray($this->validated())`. O `toArray()` do DTO devolve as colunas do banco sem os campos `null`, o que permite PATCH parcial.
 
 O `bootstrap/app.php` já renderiza todas as exceções (inclusive erros de validação) como JSON em `api/*`: não adicione formatação de erros nos controllers.
+
+Cada regra de negócio fica no service do módulo dono dela (ex.: a dificuldade gerada pelo peso em `HabitoService`, o XP do dia em `XpDiarioService`); um service pode usar outro service ou repository para ler dados de outro módulo. Quando uma regra não pode ser validada só na Form Request (depende do registro salvo, ou o service é chamado sem request), lance `App\Exceptions\RegraDeNegocioException($campo, $mensagem)`: o `bootstrap/app.php` a converte em 422, no formato dos erros de validação. Regras de validação reutilizáveis ficam em `app/Rules`, e os parâmetros fixos do jogo em `config/` (ex.: `config/progression.php`, `teto_diario` = 25), não no `.env`.
+
+O Swagger (Scramble) usa o docblock do método do controller como descrição do endpoint e o comentário `/** ... */` acima de cada regra da Form Request como descrição do campo.
+
+## Regras de negócio implementadas
+
+- **Peso e dificuldade:** o usuário envia o `peso` (inteiro de 1 a 20), e a `dificuldade` vem de `Dificuldade::doPeso()`: 1–5 `FACIL`, 6–10 `MEDIO`, 11–15 `DIFICIL`, 16–20 `MUITO_DIFICIL`. Uma `dificuldade` enviada é descartada.
+- **Frequência:** `habito.dia_frequencia` é `null` no `DIARIA`, `SEG`…`DOM` (`DiaSemana`) no `SEMANAL` e `1`…`31` no `MENSAL`. A `frequencia` e o `dia_frequencia` são sempre enviados juntos; a combinação é validada por `DiaFrequenciaValido` e `HabitoService::validarFrequencia()`.
+- **Hábitos do dia:** `GET /api/habits/daily?data=AAAA-MM-DD` (`HabitoService::habitosDiarios()`) lista os hábitos ativos da data. Uma data inexistente devolve 422, e um hábito mensal dos dias 29 a 31 só aparece nos meses que têm esse dia.
+- **XP do dia:** `XpDiarioService::xpDoDia()` aplica `(∑W cumpridos / ∑W total) × teto_diario`, com `pesoRealizadoDoDia()` somando os check-ins `CONCLUIDO` (peso inteiro) e `EM_ANDAMENTO` (peso × percentual). Os hábitos semanais ficam fora (pool semanal, ainda não feito), e o XP ainda não é gravado nem somado ao `users.xp_vitalicio`.
+- **XP vitalício:** `users.xp_vitalicio` (padrão 0) fica fora do `Fillable` do `User`.
 
 ## Módulos e estrutura de pastas
 
@@ -63,22 +81,25 @@ Onde cada coisa fica:
 | Repositories | `app/Repositories` (estendem `BaseRepository`) | `HabitoRepository.php` |
 | Resources | `app/Http/Resources/<Modulo>` | `Habits/HabitoResource.php` |
 | Models | `app/Models` (sem subpastas, compartilhados entre módulos) | `Habito.php` |
-| Migrations, factories, seeders | pastas padrão de `database/` | `create_habits_table` |
-| Testes | `tests/Feature/<Modulo>` | `Habits/HabitTest.php` |
+| Migrations, factories, seeders | pastas padrão de `database/` | `adicionar_dia_frequencia_em_habito` |
+| Regras e exceções | `app/Rules`, `app/Exceptions` | `DiaFrequenciaValido.php` |
+| Testes | `tests/Feature/<Modulo>`, `tests/Unit` | `Habits/HabitoApiTest.php` |
 
 Regras:
 
 - Todas as rotas ficam em `auth:sanctum`, exceto cadastro e login do MOD1.
-- Os nomes de pastas, classes e rotas seguem as convenções do Laravel, em inglês. As tabelas de `docs/DER.md` estão em português e são mapeadas para esses models (ex.: `habito` → `Habit`).
+- As pastas de módulo e as rotas seguem as convenções do Laravel, em inglês. As classes de domínio usam o nome da tabela do `docs/DER.md`, em português (`habito` → `Habito`, `HabitoService`, `HabitoController`). A exceção é o `usuario` do DER, que é a tabela `users` e o model `User`.
+- O MOD7 foge do padrão: `app/Services/Statistics/StatisticService.php` não estende `BaseService`, e as rotas são endpoints próprios, não `apiResource`.
 - O MOD8 também usa `app/Notifications` e `app/Jobs`, com o agendamento em `routes/console.php`.
 
-Estado atual: todas as tabelas do DER têm model, repository e service, e cada service tem um controller com CRUD (`apiResource`, parâmetro `{id}`) no prefixo do seu módulo, documentado no Swagger em `/docs/api`. Faltam as regras de negócio dos módulos e a autenticação real: o `Api/AuthController.php` ainda é um **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum). Ao implementar o MOD1, substitua o mock e mova-o para `Api/Auth/`, com as rotas em `routes/api/auth.php`.
+Estado atual: todas as tabelas do DER têm model, repository e service, e cada service tem um controller com CRUD (`apiResource`, parâmetro `{id}`) no prefixo do seu módulo, documentado no Swagger em `/docs/api`. Já existem as regras listadas em "Regras de negócio implementadas"; faltam as demais (pool semanal, níveis, dragão, onboarding etc.) e a autenticação real: o `Api/AuthController.php` ainda é um **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum). Ao implementar o MOD1, substitua o mock e mova-o para `Api/Auth/`, com as rotas em `routes/api/auth.php`.
 
 ## Documentação
 
 - `docs/ESCOPO.md`: especificação do produto (regras de XP, níveis, dragão, estatísticas, onboarding).
 - `docs/DER.md`: modelo ER e enums.
 - `docs/MODULOS.md`: divisão do back-end em módulos.
+- `docs/RF-MODULOS.md` (local, fora do git): requisitos por módulo como caixas de seleção `MODn-TASKm`; marque `[x]` ao concluir. No Linear (time GER-PROJ), as mesmas tarefas são caixas de seleção nas issues "deck" de cada subgrupo (ex.: GER-14 · `MOD5-DECK2 · XP diário`); marque nos dois lugares.
 - `docs/config/mcp/LINEAR.md`: como configurar o MCP do Linear.
 
 ## Convenções de git
