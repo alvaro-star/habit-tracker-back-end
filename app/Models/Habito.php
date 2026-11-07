@@ -10,8 +10,6 @@ class Habito extends Model
 {
     protected $table = 'habito';
 
-    const CREATED_AT = 'data_criacao';
-
     const UPDATED_AT = null;
 
     protected $fillable = [
@@ -21,12 +19,22 @@ class Habito extends Model
         'polaridade',
         'tipo_meta',
         'frequencia',
+        'dia_frequencia',
         'valor_meta',
         'unidade',
         'dificuldade',
         'peso',
         'ativo',
     ];
+
+    /** @return array<string, string> */
+    protected function casts(): array
+    {
+        return [
+            'ativo' => 'boolean',
+            'valor_meta' => 'decimal:2',
+        ];
+    }
 
     public function categoria(): BelongsTo
     {
