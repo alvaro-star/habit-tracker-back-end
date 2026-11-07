@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ElementoDragao;
 use App\Enums\EstagioDragao;
 use App\Enums\StatusDragao;
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +17,8 @@ class Dragao extends Model
 
     protected $fillable = [
         'fk_id_usuario',
+        // Elemento atual (ElementoDragao); cada troca entra na trajetória (escolha_elemento).
+        'elemento',
         'nome',
         'xp_ciclo',
         'status',
@@ -32,6 +35,7 @@ class Dragao extends Model
         return [
             'status' => StatusDragao::class,
             'estagio' => EstagioDragao::class,
+            'elemento' => ElementoDragao::class,
             'data_nascimento' => 'date',
             'data_termino' => 'date',
         ];

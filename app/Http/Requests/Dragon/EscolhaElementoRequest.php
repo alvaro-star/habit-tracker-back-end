@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Dragon;
 
 use App\DTOs\Dragon\EscolhaElementoDTO;
+use App\Enums\ElementoDragao;
 use App\Http\Requests\ApiRequest;
 use Illuminate\Validation\Rule;
 
@@ -19,7 +20,8 @@ class EscolhaElementoRequest extends ApiRequest
         return [
             // O dragão precisa pertencer ao usuário autenticado.
             'fk_id_dragao' => [$obrigatorio, 'integer', Rule::exists('dragao', 'id')->where('fk_id_usuario', $this->user()?->id)],
-            'fk_id_elemento' => [$obrigatorio, 'integer', 'exists:elemento,id'],
+            /** FOGO, TERRA, AGUA ou AR. */
+            'elemento' => [$obrigatorio, Rule::enum(ElementoDragao::class)],
             'data_escolha' => [$obrigatorio, 'date'],
         ];
     }

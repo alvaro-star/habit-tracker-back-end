@@ -4,6 +4,7 @@ namespace Tests\Feature\Mod0;
 
 use App\Enums\CanalNotificacao;
 use App\Enums\Dificuldade;
+use App\Enums\ElementoDragao;
 use App\Enums\StatusDragao;
 use App\Enums\TipoMeta;
 use App\Models\Dragao;
@@ -11,7 +12,6 @@ use App\Models\User;
 use App\Services\BaseService;
 use App\Services\CategoriaService;
 use App\Services\DragaoService;
-use App\Services\ElementoService;
 use App\Services\EscolhaElementoService;
 use App\Services\GatilhoNotificacaoService;
 use App\Services\HabitoModeloService;
@@ -26,14 +26,6 @@ use Tests\TestCase;
 class CrudServicosTest extends TestCase
 {
     use RefreshDatabase;
-
-    public function test_elemento_crud(): void
-    {
-        $this->verificarCicloCrud(app(ElementoService::class), [
-            'nome' => 'Fogo',
-            'cenario_url' => 'https://exemplo.test/fogo.png',
-        ], ['cenario_url' => 'https://exemplo.test/fogo-2.png'], 'cenario_url');
-    }
 
     public function test_insignia_crud(): void
     {
@@ -92,17 +84,11 @@ class CrudServicosTest extends TestCase
     public function test_escolha_elemento_crud(): void
     {
         [$dragao] = $this->criarDragao();
-        $elemento = app(ElementoService::class)->criar([
-            'nome' => 'Água',
-            'cenario_url' => 'https://exemplo.test/agua.png',
-        ]);
-        $outro = app(ElementoService::class)->criar(['nome' => 'Fogo', 'cenario_url' => 'https://exemplo.test/fogo.png']);
-
         $this->verificarCicloCrud(app(EscolhaElementoService::class), [
             'fk_id_dragao' => $dragao->id,
-            'fk_id_elemento' => $elemento->id,
+            'elemento' => ElementoDragao::AGUA,
             'data_escolha' => now(),
-        ], ['fk_id_elemento' => $outro->id], 'fk_id_elemento');
+        ], ['elemento' => ElementoDragao::FOGO], 'elemento');
     }
 
     public function test_xp_diario_crud(): void
@@ -171,7 +157,7 @@ class CrudServicosTest extends TestCase
     {
         $this->expectException(ModelNotFoundException::class);
 
-        app(ElementoService::class)->atualizar(999, ['nome' => 'Inexistente']);
+        app(InsigniaService::class)->atualizar(999, ['nome' => 'Inexistente']);
     }
 
     /**

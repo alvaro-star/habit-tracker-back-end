@@ -3,7 +3,6 @@
 namespace Tests\Feature\Dragon;
 
 use App\Models\Dragao;
-use App\Models\Elemento;
 use App\Models\EscolhaElemento;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -35,9 +34,9 @@ class DragonApiTest extends TestCase
         ]);
     }
 
-    public function test_crud_do_catalogo_de_elementos(): void
+    public function test_elementos_nao_tem_mais_endpoint(): void
     {
-        $this->verificarCrud('/api/dragon/elements', ['nome' => 'Fogo', 'cenario_url' => 'vulcao.png'], ['cenario_url' => 'lava.png']);
+        $this->getJson('/api/dragon/elements')->assertNotFound();
     }
 
     public function test_ovos_e_estagios_nao_tem_mais_endpoints(): void
@@ -127,21 +126,73 @@ class DragonApiTest extends TestCase
             ->assertJsonPath('data.estagio', 'JOVEM')
             ->json('data.id');
 
-        $this->patchJson("/api/dragon/dragons/{$id}", ['xp_ciclo' => 9000])
+        $this->patchJson("/api/dragon/dragons/{$id}", ['xp_ciclo' => 9000, 'elemento' => 'FOGO'])
             ->assertOk()
             ->assertJsonPath('data.estagio', 'ADULTO_FINAL');
 
         $this->assertDatabaseHas('dragao', ['id' => $id, 'estagio' => 'ADULTO_FINAL']);
     }
 
+    public function test_elemento_e_obrigatorio_a_partir_dos_6000_xp(): void
+    {
+        $id = $this->postJson('/api/dragon/dragons', $this->corpoDragao(['xp_ciclo' => 5000]))->json('data.id');
+
+        // Antes dos 6.000 XP, o elemento é opcional.
+        $this->patchJson("/api/dragon/dragons/{$id}", ['nome' => 'Smaug II'])->assertOk()
+            ->assertJsonPath('data.precisa_escolher_elemento', false);
+
+        // Chegar aos 6.000 XP sem elemento devolve 422.
+        $this->patchJson("/api/dragon/dragons/{$id}", ['xp_ciclo' => 6000])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['elemento']);
+
+        // Com o elemento, passa; e depois disso ele não precisa ser reenviado.
+        $this->patchJson("/api/dragon/dragons/{$id}", ['xp_ciclo' => 6000, 'elemento' => 'AGUA'])
+            ->assertOk()
+            ->assertJsonPath('data.elemento', 'AGUA')
+            ->assertJsonPath('data.precisa_escolher_elemento', false);
+        $this->patchJson("/api/dragon/dragons/{$id}", ['nome' => 'Smaug III'])->assertOk();
+
+        // Um PATCH não limpa campos com null (o DTO descarta nulos): o elemento continua.
+        $this->patchJson("/api/dragon/dragons/{$id}", ['elemento' => null])
+            ->assertOk()
+            ->assertJsonPath('data.elemento', 'AGUA');
+
+        // Só valem FOGO, TERRA, AGUA e AR.
+        $this->patchJson("/api/dragon/dragons/{$id}", ['elemento' => 'GELO'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['elemento']);
+    }
+
+    public function test_dragao_que_passou_dos_6000_xp_pede_o_elemento(): void
+    {
+        $id = $this->postJson('/api/dragon/dragons', $this->corpoDragao(['xp_ciclo' => 6100]))->json('data.id');
+
+        $this->getJson("/api/dragon/dragons/{$id}")->assertOk()->assertJsonPath('data.precisa_escolher_elemento', true);
+    }
+
+    public function test_trocar_o_elemento_registra_a_trajetoria(): void
+    {
+        $id = $this->postJson('/api/dragon/dragons', $this->corpoDragao(['xp_ciclo' => 6000]))->json('data.id');
+
+        $this->patchJson("/api/dragon/dragons/{$id}", ['elemento' => 'FOGO'])->assertOk();
+        $this->patchJson("/api/dragon/dragons/{$id}", ['elemento' => 'FOGO'])->assertOk(); // mesmo elemento: não repete
+        $this->patchJson("/api/dragon/dragons/{$id}", ['xp_ciclo' => 9000, 'elemento' => 'TERRA'])->assertOk();
+
+        $trajetoria = EscolhaElemento::where('fk_id_dragao', $id)->orderBy('id')->get();
+        $this->assertSame(['FOGO', 'TERRA'], $trajetoria->map(fn ($escolha) => $escolha->elemento->value)->all());
+        $this->assertSame(['ADULTO', 'ADULTO_FINAL'], $trajetoria->map(fn ($escolha) => $escolha->estagio->value)->all());
+
+        $this->getJson('/api/dragon/element-choices')->assertOk()->assertJsonCount(2, 'data');
+    }
+
     public function test_escolha_de_elemento_guarda_o_estagio_atual_do_dragao(): void
     {
         $id = $this->postJson('/api/dragon/dragons', $this->corpoDragao(['xp_ciclo' => 6000]))->json('data.id');
-        $elemento = Elemento::create(['nome' => 'Fogo', 'cenario_url' => 'vulcao.png']);
 
         $this->postJson('/api/dragon/element-choices', [
             'fk_id_dragao' => $id,
-            'fk_id_elemento' => $elemento->id,
+            'elemento' => 'FOGO',
             'data_escolha' => '2026-11-04 10:00:00',
         ])->assertCreated()->assertJsonPath('data.estagio', 'ADULTO');
     }
@@ -161,10 +212,9 @@ class DragonApiTest extends TestCase
     {
         $meu = $this->dragaoDe($this->usuario);
         $alheio = $this->dragaoDe(User::factory()->create());
-        $elemento = Elemento::create(['nome' => 'Agua', 'cenario_url' => 'mar.png']);
 
         $corpo = [
-            'fk_id_elemento' => $elemento->id,
+            'elemento' => 'FOGO',
             'data_escolha' => '2026-11-04 10:00:00',
         ];
 
@@ -182,7 +232,7 @@ class DragonApiTest extends TestCase
         $alheio = $this->dragaoDe(User::factory()->create());
         $escolha = EscolhaElemento::create([
             'fk_id_dragao' => $alheio->id,
-            'fk_id_elemento' => Elemento::create(['nome' => 'Ar', 'cenario_url' => 'ceu.png'])->id,
+            'elemento' => 'AR',
             'data_escolha' => '2026-11-04 10:00:00',
         ]);
 

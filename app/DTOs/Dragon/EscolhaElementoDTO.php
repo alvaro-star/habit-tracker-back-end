@@ -3,13 +3,14 @@
 namespace App\DTOs\Dragon;
 
 use App\DTOs\DTO;
+use App\Enums\ElementoDragao;
 use Carbon\CarbonImmutable;
 
 final readonly class EscolhaElementoDTO extends DTO
 {
     public function __construct(
         public ?int $dragaoId = null,
-        public ?int $elementoId = null,
+        public ?ElementoDragao $elemento = null,
         public ?CarbonImmutable $dataEscolha = null,
     ) {}
 
@@ -18,7 +19,7 @@ final readonly class EscolhaElementoDTO extends DTO
     {
         return new self(
             dragaoId: self::inteiro($dados, 'fk_id_dragao'),
-            elementoId: self::inteiro($dados, 'fk_id_elemento'),
+            elemento: self::enum($dados, 'elemento', ElementoDragao::class),
             dataEscolha: self::data($dados, 'data_escolha'),
         );
     }
@@ -27,7 +28,7 @@ final readonly class EscolhaElementoDTO extends DTO
     {
         return $this->semNulos([
             'fk_id_dragao' => $this->dragaoId,
-            'fk_id_elemento' => $this->elementoId,
+            'elemento' => $this->elemento?->value,
             'data_escolha' => $this->dataEscolha?->toDateTimeString(),
         ]);
     }
