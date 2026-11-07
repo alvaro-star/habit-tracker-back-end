@@ -19,4 +19,17 @@ return [
      */
     'teto_diario' => 25,
 
+    /*
+     * Nível vitalício (ESCOPO.md, seção 4.1; MOD5-TASK6 e TASK7): 30 níveis,
+     * alcançados com 9.000 XP vitalícios no total, e cada nível exige cerca de
+     * 10% de XP a mais que o anterior. O nível 1 começa em 0 XP, e os 29 passos
+     * seguintes somam os 9.000 XP. O NivelService calcula os intervalos e o
+     * nível de cada XP a partir destes valores, sem tabela no banco.
+     */
+    'niveis' => [
+        'quantidade' => 30,
+        'xp_total' => 9000,
+        'crescimento' => 0.10,
+    ],
+
 ];
