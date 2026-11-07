@@ -5,7 +5,6 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -22,8 +21,10 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
 
+        // Regras de negócio violadas no service respondem com o status da exceção (422 por padrão),
+        // no formato dos erros de validação.
         $exceptions->render(fn (RegraDeNegocioException $e) => response()->json([
             'message' => $e->getMessage(),
             'errors' => [$e->campo => [$e->getMessage()]],
-        ], Response::HTTP_UNPROCESSABLE_ENTITY));
+        ], $e->status));
     })->create();

@@ -14,6 +14,8 @@ final readonly class RegistroHabitoDTO extends DTO
         public ?StatusRegistro $status = null,
         public ?float $valorRealizado = null,
         public ?float $percentual = null,
+        /** true marca o hábito no dia (cria ou atualiza o registro); false o desmarca (exclui o registro). */
+        public ?bool $checked = null,
     ) {}
 
     /** @param array<string, mixed> $dados dados validados da requisição */
@@ -25,9 +27,11 @@ final readonly class RegistroHabitoDTO extends DTO
             status: self::enum($dados, 'status', StatusRegistro::class),
             valorRealizado: self::decimal($dados, 'valor_realizado'),
             percentual: self::decimal($dados, 'percentual'),
+            checked: self::booleano($dados, 'checked'),
         );
     }
 
+    /** O checked não é coluna: decide se o registro é gravado ou excluído. */
     public function toArray(): array
     {
         return $this->semNulos([
