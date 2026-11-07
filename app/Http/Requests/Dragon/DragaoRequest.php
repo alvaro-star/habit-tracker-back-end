@@ -18,9 +18,8 @@ class DragaoRequest extends ApiRequest
         $obrigatorio = $this->obrigatorio();
 
         return [
-            'fk_id_ovo' => [$obrigatorio, 'integer', 'exists:ovo,id'],
-            'fk_id_estagio' => [$obrigatorio, 'integer', 'exists:estagio,id'],
             'nome' => [$obrigatorio, 'string', 'max:40'],
+            /** XP do ciclo. Ele define o estágio do dragão (OVO, FILHOTE, JOVEM, ADULTO, ADULTO_FINAL), que não é enviado. */
             'xp_ciclo' => [$obrigatorio, 'integer', 'min:0'],
             'status' => [$obrigatorio, Rule::enum(StatusDragao::class)],
             'data_nascimento' => [$obrigatorio, 'date_format:Y-m-d'],

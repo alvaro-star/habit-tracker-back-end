@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\DTOs\DTO;
+use App\Enums\EstagioDragao;
 use App\Enums\StatusDragao;
 use App\Exceptions\RegraDeNegocioException;
 use App\Models\Dragao;
@@ -77,6 +78,22 @@ class DragaoService extends BaseService
         } elseif ($dragao->usuario->fk_id_dragao === $dragao->id) {
             $this->repositorio->definirDragaoAtivo($usuarioId, null);
         }
+    }
+
+    /**
+     * O estágio é sempre gerado pelo xp_ciclo (EstagioDragao::doXp): um estágio
+     * enviado é descartado. Vale para todas as operações de criação e edição.
+     */
+    protected function paraArray(array|DTO $dados): array
+    {
+        $dados = parent::paraArray($dados);
+        unset($dados['estagio']);
+
+        if (isset($dados['xp_ciclo'])) {
+            $dados['estagio'] = EstagioDragao::doXp((int) $dados['xp_ciclo'])->value;
+        }
+
+        return $dados;
     }
 
     private function ativo(mixed $status): bool

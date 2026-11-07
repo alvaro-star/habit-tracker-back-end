@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Enums\EstagioDragao;
 use App\Enums\StatusDragao;
 use App\Models\Dragao;
 use App\Models\User;
@@ -19,12 +20,14 @@ class DragaoRepository extends BaseRepository
             ->exists();
     }
 
-    /** Soma (ou subtrai, se negativa) a diferença ao xp_ciclo do dragão, sem deixá-lo abaixo de zero. */
+    /** Soma (ou subtrai, se negativa) a diferença ao xp_ciclo do dragão, sem deixá-lo abaixo de zero, e acerta o estágio. */
     public function somarXpCiclo(int $dragaoId, int $diferenca): void
     {
         /** @var Dragao $dragao */
         $dragao = $this->buscarOuFalhar($dragaoId);
-        $this->atualizar($dragao, ['xp_ciclo' => max(0, $dragao->xp_ciclo + $diferenca)]);
+        $xpCiclo = max(0, $dragao->xp_ciclo + $diferenca);
+
+        $this->atualizar($dragao, ['xp_ciclo' => $xpCiclo, 'estagio' => EstagioDragao::doXp($xpCiclo)->value]);
     }
 
     /** Grava o dragão ativo do usuário em users.fk_id_dragao (null para nenhum). */

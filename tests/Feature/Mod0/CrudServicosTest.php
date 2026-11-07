@@ -7,19 +7,16 @@ use App\Enums\Dificuldade;
 use App\Enums\StatusDragao;
 use App\Enums\TipoMeta;
 use App\Models\Dragao;
-use App\Models\Estagio;
 use App\Models\User;
 use App\Services\BaseService;
 use App\Services\CategoriaService;
 use App\Services\DragaoService;
 use App\Services\ElementoService;
 use App\Services\EscolhaElementoService;
-use App\Services\EstagioService;
 use App\Services\GatilhoNotificacaoService;
 use App\Services\HabitoModeloService;
 use App\Services\HabitoService;
 use App\Services\InsigniaService;
-use App\Services\OvoService;
 use App\Services\RegistroHabitoService;
 use App\Services\XpDiarioService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -30,29 +27,12 @@ class CrudServicosTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_estagio_crud(): void
-    {
-        $this->verificarCicloCrud(app(EstagioService::class), [
-            'nome' => 'Ovo',
-            'ordem' => 1,
-            'xp_marco' => 0,
-        ], ['nome' => 'Filhote'], 'nome');
-    }
-
     public function test_elemento_crud(): void
     {
         $this->verificarCicloCrud(app(ElementoService::class), [
             'nome' => 'Fogo',
             'cenario_url' => 'https://exemplo.test/fogo.png',
         ], ['cenario_url' => 'https://exemplo.test/fogo-2.png'], 'cenario_url');
-    }
-
-    public function test_ovo_crud(): void
-    {
-        $this->verificarCicloCrud(app(OvoService::class), [
-            'nome' => 'Ovo Verde',
-            'imagem_url' => 'https://exemplo.test/ovo.png',
-        ], ['nome' => 'Ovo Dourado'], 'nome');
     }
 
     public function test_insignia_crud(): void
@@ -99,16 +79,9 @@ class CrudServicosTest extends TestCase
     public function test_dragao_crud(): void
     {
         $usuario = User::factory()->create();
-        $ovo = app(OvoService::class)->criar([
-            'nome' => 'Ovo Verde',
-            'imagem_url' => 'https://exemplo.test/ovo.png',
-        ]);
-        $estagio = app(EstagioService::class)->criar(['nome' => 'Ovo', 'ordem' => 1, 'xp_marco' => 0]);
 
         $this->verificarCicloCrud(app(DragaoService::class), [
             'fk_id_usuario' => $usuario->id,
-            'fk_id_ovo' => $ovo->id,
-            'fk_id_estagio' => $estagio->id,
             'nome' => 'Ignis',
             'xp_ciclo' => 0,
             'status' => StatusDragao::ATIVO,
@@ -118,19 +91,18 @@ class CrudServicosTest extends TestCase
 
     public function test_escolha_elemento_crud(): void
     {
-        [$dragao, $estagio] = $this->criarDragao();
+        [$dragao] = $this->criarDragao();
         $elemento = app(ElementoService::class)->criar([
             'nome' => 'Água',
             'cenario_url' => 'https://exemplo.test/agua.png',
         ]);
-        $outroEstagio = app(EstagioService::class)->criar(['nome' => 'Filhote', 'ordem' => 2, 'xp_marco' => 500]);
+        $outro = app(ElementoService::class)->criar(['nome' => 'Fogo', 'cenario_url' => 'https://exemplo.test/fogo.png']);
 
         $this->verificarCicloCrud(app(EscolhaElementoService::class), [
             'fk_id_dragao' => $dragao->id,
             'fk_id_elemento' => $elemento->id,
-            'fk_id_estagio' => $estagio->id,
             'data_escolha' => now(),
-        ], ['fk_id_estagio' => $outroEstagio->id], 'fk_id_estagio');
+        ], ['fk_id_elemento' => $outro->id], 'fk_id_elemento');
     }
 
     public function test_xp_diario_crud(): void
@@ -199,34 +171,27 @@ class CrudServicosTest extends TestCase
     {
         $this->expectException(ModelNotFoundException::class);
 
-        app(EstagioService::class)->atualizar(999, ['nome' => 'Inexistente']);
+        app(ElementoService::class)->atualizar(999, ['nome' => 'Inexistente']);
     }
 
     /**
-     * Cria um dragão com as dependências mínimas (usuário, ovo e estágio).
+     * Cria um dragão com as dependências mínimas (usuário).
      *
-     * @return array{0: Dragao, 1: Estagio}
+     * @return array{0: Dragao}
      */
     private function criarDragao(): array
     {
         $usuario = User::factory()->create();
-        $ovo = app(OvoService::class)->criar([
-            'nome' => 'Ovo Verde',
-            'imagem_url' => 'https://exemplo.test/ovo.png',
-        ]);
-        $estagio = app(EstagioService::class)->criar(['nome' => 'Ovo', 'ordem' => 1, 'xp_marco' => 0]);
 
         $dragao = app(DragaoService::class)->criar([
             'fk_id_usuario' => $usuario->id,
-            'fk_id_ovo' => $ovo->id,
-            'fk_id_estagio' => $estagio->id,
             'nome' => 'Ignis',
             'xp_ciclo' => 0,
             'status' => StatusDragao::ATIVO,
             'data_nascimento' => '2026-11-01',
         ]);
 
-        return [$dragao, $estagio];
+        return [$dragao];
     }
 
     /**

@@ -5,8 +5,6 @@ namespace Tests\Feature\Dragon;
 use App\Models\Dragao;
 use App\Models\Elemento;
 use App\Models\EscolhaElemento;
-use App\Models\Estagio;
-use App\Models\Ovo;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -30,8 +28,6 @@ class DragonApiTest extends TestCase
     {
         return Dragao::create([
             'fk_id_usuario' => $usuario->id,
-            'fk_id_ovo' => Ovo::create(['nome' => 'Ovo', 'imagem_url' => 'ovo.png'])->id,
-            'fk_id_estagio' => Estagio::create(['nome' => 'Ovo', 'ordem' => 1, 'xp_marco' => 0])->id,
             'nome' => 'Smaug',
             'xp_ciclo' => 0,
             'status' => 'ATIVO',
@@ -39,21 +35,20 @@ class DragonApiTest extends TestCase
         ]);
     }
 
-    public function test_crud_dos_catalogos_do_dragao(): void
+    public function test_crud_do_catalogo_de_elementos(): void
     {
-        $this->verificarCrud('/api/dragon/eggs', ['nome' => 'Ovo de fogo', 'imagem_url' => 'fogo.png'], ['nome' => 'Ovo flamejante']);
-        $this->verificarCrud('/api/dragon/stages', ['nome' => 'Filhote', 'ordem' => 2, 'xp_marco' => 300], ['xp_marco' => 350]);
         $this->verificarCrud('/api/dragon/elements', ['nome' => 'Fogo', 'cenario_url' => 'vulcao.png'], ['cenario_url' => 'lava.png']);
+    }
+
+    public function test_ovos_e_estagios_nao_tem_mais_endpoints(): void
+    {
+        $this->getJson('/api/dragon/eggs')->assertNotFound();
+        $this->getJson('/api/dragon/stages')->assertNotFound();
     }
 
     public function test_cria_dragao_para_o_usuario_autenticado(): void
     {
-        $ovo = Ovo::create(['nome' => 'Ovo', 'imagem_url' => 'ovo.png']);
-        $estagio = Estagio::create(['nome' => 'Ovo', 'ordem' => 1, 'xp_marco' => 0]);
-
         $this->postJson('/api/dragon/dragons', [
-            'fk_id_ovo' => $ovo->id,
-            'fk_id_estagio' => $estagio->id,
             'nome' => 'Smaug',
             'xp_ciclo' => 0,
             'status' => 'ATIVO',
@@ -62,6 +57,7 @@ class DragonApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.nome', 'Smaug')
             ->assertJsonPath('data.status', 'ATIVO')
+            ->assertJsonPath('data.estagio', 'OVO')
             ->assertJsonPath('data.data_nascimento', '2026-11-04')
             ->assertJsonPath('data.data_termino', null);
 
@@ -71,8 +67,6 @@ class DragonApiTest extends TestCase
     private function corpoDragao(array $extra = []): array
     {
         return array_merge([
-            'fk_id_ovo' => Ovo::create(['nome' => 'Ovo', 'imagem_url' => 'ovo.png'])->id,
-            'fk_id_estagio' => Estagio::create(['nome' => 'Ovo', 'ordem' => 1, 'xp_marco' => 0])->id,
             'nome' => 'Smaug',
             'xp_ciclo' => 0,
             'status' => 'ATIVO',
@@ -126,6 +120,32 @@ class DragonApiTest extends TestCase
         $this->assertNull($this->usuario->refresh()->fk_id_dragao);
     }
 
+    public function test_estagio_vem_do_xp_do_ciclo_e_nao_pode_ser_enviado(): void
+    {
+        $id = $this->postJson('/api/dragon/dragons', $this->corpoDragao(['xp_ciclo' => 1500, 'estagio' => 'OVO']))
+            ->assertCreated()
+            ->assertJsonPath('data.estagio', 'JOVEM')
+            ->json('data.id');
+
+        $this->patchJson("/api/dragon/dragons/{$id}", ['xp_ciclo' => 9000])
+            ->assertOk()
+            ->assertJsonPath('data.estagio', 'ADULTO_FINAL');
+
+        $this->assertDatabaseHas('dragao', ['id' => $id, 'estagio' => 'ADULTO_FINAL']);
+    }
+
+    public function test_escolha_de_elemento_guarda_o_estagio_atual_do_dragao(): void
+    {
+        $id = $this->postJson('/api/dragon/dragons', $this->corpoDragao(['xp_ciclo' => 6000]))->json('data.id');
+        $elemento = Elemento::create(['nome' => 'Fogo', 'cenario_url' => 'vulcao.png']);
+
+        $this->postJson('/api/dragon/element-choices', [
+            'fk_id_dragao' => $id,
+            'fk_id_elemento' => $elemento->id,
+            'data_escolha' => '2026-11-04 10:00:00',
+        ])->assertCreated()->assertJsonPath('data.estagio', 'ADULTO');
+    }
+
     public function test_dragoes_de_outro_usuario_ficam_invisiveis(): void
     {
         $meu = $this->dragaoDe($this->usuario);
@@ -145,7 +165,6 @@ class DragonApiTest extends TestCase
 
         $corpo = [
             'fk_id_elemento' => $elemento->id,
-            'fk_id_estagio' => $meu->fk_id_estagio,
             'data_escolha' => '2026-11-04 10:00:00',
         ];
 
@@ -164,7 +183,6 @@ class DragonApiTest extends TestCase
         $escolha = EscolhaElemento::create([
             'fk_id_dragao' => $alheio->id,
             'fk_id_elemento' => Elemento::create(['nome' => 'Ar', 'cenario_url' => 'ceu.png'])->id,
-            'fk_id_estagio' => $alheio->fk_id_estagio,
             'data_escolha' => '2026-11-04 10:00:00',
         ]);
 

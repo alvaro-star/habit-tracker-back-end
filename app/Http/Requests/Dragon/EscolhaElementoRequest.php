@@ -20,7 +20,6 @@ class EscolhaElementoRequest extends ApiRequest
             // O dragão precisa pertencer ao usuário autenticado.
             'fk_id_dragao' => [$obrigatorio, 'integer', Rule::exists('dragao', 'id')->where('fk_id_usuario', $this->user()?->id)],
             'fk_id_elemento' => [$obrigatorio, 'integer', 'exists:elemento,id'],
-            'fk_id_estagio' => [$obrigatorio, 'integer', 'exists:estagio,id'],
             'data_escolha' => [$obrigatorio, 'date'],
         ];
     }

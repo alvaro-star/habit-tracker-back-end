@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\EstagioDragao;
 use App\Enums\StatusDragao;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,11 +16,11 @@ class Dragao extends Model
 
     protected $fillable = [
         'fk_id_usuario',
-        'fk_id_ovo',
-        'fk_id_estagio',
         'nome',
         'xp_ciclo',
         'status',
+        // Gerado pelo DragaoService a partir do xp_ciclo; não vem da requisição.
+        'estagio',
         'data_nascimento',
         'data_termino',
         'arte_final_url',
@@ -30,6 +31,7 @@ class Dragao extends Model
     {
         return [
             'status' => StatusDragao::class,
+            'estagio' => EstagioDragao::class,
             'data_nascimento' => 'date',
             'data_termino' => 'date',
         ];
@@ -38,16 +40,6 @@ class Dragao extends Model
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(User::class, 'fk_id_usuario');
-    }
-
-    public function ovo(): BelongsTo
-    {
-        return $this->belongsTo(Ovo::class, 'fk_id_ovo');
-    }
-
-    public function estagio(): BelongsTo
-    {
-        return $this->belongsTo(Estagio::class, 'fk_id_estagio');
     }
 
     public function escolhasElemento(): HasMany

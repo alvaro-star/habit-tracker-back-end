@@ -16,7 +16,7 @@ class EscolhaElementoResource extends JsonResource
             'id' => $this->id,
             'fk_id_dragao' => $this->fk_id_dragao,
             'fk_id_elemento' => $this->fk_id_elemento,
-            'fk_id_estagio' => $this->fk_id_estagio,
+            'estagio' => $this->estagio,
             'data_escolha' => $this->data_escolha,
         ];
     }
