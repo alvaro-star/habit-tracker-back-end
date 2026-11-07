@@ -1,12 +1,12 @@
 <?php
 
-namespace Tests\Feature\Habits;
+namespace Tests\Feature\Progression;
 
 use App\Models\Categoria;
 use App\Models\Habito;
 use App\Models\RegistroHabito;
 use App\Models\User;
-use App\Services\HabitoService;
+use App\Services\XpDiarioService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -48,7 +48,7 @@ class XpDoDiaTest extends TestCase
 
     private function xpDoDia(string $data = '2026-11-09'): array
     {
-        return app(HabitoService::class)->xpDoDia($this->usuario->id, CarbonImmutable::parse($data));
+        return app(XpDiarioService::class)->xpDoDia($this->usuario->id, CarbonImmutable::parse($data));
     }
 
     public function test_calcula_o_xp_ponderado_com_concluidos_e_em_andamento(): void
