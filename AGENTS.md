@@ -12,9 +12,12 @@ Este repositório é o **back-end** do Habit Tracker, um sistema para gerenciar 
 composer test                                # config:clear + php artisan test
 php artisan test --filter=HabitoApiTest      # uma classe/método de teste
 vendor/bin/pint --dirty                      # formata os arquivos PHP alterados
+composer lint                                # confere o estilo (pint --test) e a análise estática (Larastan, nível 5)
 php artisan serve                            # API em http://localhost:8000
 composer dev                                 # php artisan dev (servidor + fila + logs + vite)
 ```
+
+Rode `composer lint` e os testes antes de concluir uma tarefa; o workflow `.github/workflows/ci.yml` roda os dois em cada PR. O comando não altera arquivos: corrija o estilo com `vendor/bin/pint`. Repositories e services novos declaram o model no docblock (`/** @extends BaseRepository<Habito> */`, `/** @extends BaseService<Habito> */`).
 
 Os testes são **PHPUnit, não Pest**: crie com `php artisan make:test Habits/HabitoApiTest --phpunit`. O trait `tests/Concerns/VerificaCrudDaApi` percorre o CRUD completo de um recurso.
 

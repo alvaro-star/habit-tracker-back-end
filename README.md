@@ -92,6 +92,15 @@ git merge main                              # atualiza a branch com a main
 Padrão de branches: `Feature/`, `Fix/`, `Refactor/`, `Docs/`.
 Padrão de commits: `feature:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`.
 
+## Lint
+
+```bash
+composer lint       # confere o estilo (Pint) e a análise estática (Larastan); não altera arquivos
+vendor/bin/pint     # corrige o estilo
+```
+
+Rode `composer lint` e os testes antes de abrir um PR (agentes de IA também). O GitHub Actions roda os dois em cada PR.
+
 ## Artisan
 
 ```bash

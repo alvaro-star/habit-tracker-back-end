@@ -17,14 +17,7 @@ enum DiaSemana: string
 
     public static function daData(CarbonInterface $data): self
     {
-        return match ($data->dayOfWeekIso) {
-            1 => self::SEG,
-            2 => self::TER,
-            3 => self::QUA,
-            4 => self::QUI,
-            5 => self::SEX,
-            6 => self::SAB,
-            7 => self::DOM,
-        };
+        // Os casos estão declarados de SEG a DOM, a mesma ordem do dia ISO (1 a 7).
+        return self::cases()[$data->dayOfWeekIso - 1];
     }
 }

@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Models\ConfigNotificacao;
 
+/** @extends BaseRepository<ConfigNotificacao> */
 class ConfigNotificacaoRepository extends BaseRepository
 {
     protected string $model = ConfigNotificacao::class;

@@ -41,6 +41,7 @@ class Dragao extends Model
         ];
     }
 
+    /** @return BelongsTo<User, $this> */
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(User::class, 'fk_id_usuario');

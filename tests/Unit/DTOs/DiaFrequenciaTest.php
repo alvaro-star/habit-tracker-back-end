@@ -30,6 +30,11 @@ class DiaFrequenciaTest extends TestCase
     public function test_dia_da_semana_de_uma_data(): void
     {
         $this->assertSame(DiaSemana::SEG, DiaSemana::daData(CarbonImmutable::parse('2026-11-09')));
+        $this->assertSame(DiaSemana::TER, DiaSemana::daData(CarbonImmutable::parse('2026-11-10')));
+        $this->assertSame(DiaSemana::QUA, DiaSemana::daData(CarbonImmutable::parse('2026-11-11')));
+        $this->assertSame(DiaSemana::QUI, DiaSemana::daData(CarbonImmutable::parse('2026-11-12')));
+        $this->assertSame(DiaSemana::SEX, DiaSemana::daData(CarbonImmutable::parse('2026-11-13')));
+        $this->assertSame(DiaSemana::SAB, DiaSemana::daData(CarbonImmutable::parse('2026-11-14')));
         $this->assertSame(DiaSemana::DOM, DiaSemana::daData(CarbonImmutable::parse('2026-11-08')));
     }
 
