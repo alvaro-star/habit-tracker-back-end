@@ -34,5 +34,4 @@ class EscolhaElemento extends Model
     {
         return $this->belongsTo(Dragao::class, 'fk_id_dragao');
     }
-
 }

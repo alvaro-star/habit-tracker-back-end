@@ -53,7 +53,7 @@ class NotificacaoService
             }
 
             $config = $this->configuracoes->doUsuarioNoGatilho($usuario->id, $gatilho->id);
-            $horario = $config?->horario ?? config('notifications.horario_streak_em_risco');
+            $horario = $config->horario ?? config('notifications.horario_streak_em_risco');
 
             if (now()->lt(today()->setTimeFromTimeString($horario))) {
                 return;

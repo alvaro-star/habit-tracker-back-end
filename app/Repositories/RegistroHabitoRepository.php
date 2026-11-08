@@ -8,6 +8,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
+/** @extends BaseRepository<RegistroHabito> */
 class RegistroHabitoRepository extends BaseRepository
 {
     protected string $model = RegistroHabito::class;

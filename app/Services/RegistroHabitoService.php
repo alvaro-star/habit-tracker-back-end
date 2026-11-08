@@ -15,7 +15,11 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 
-/** @property RegistroHabitoRepository $repositorio */
+/**
+ * @property RegistroHabitoRepository $repositorio
+ *
+ * @extends BaseService<RegistroHabito>
+ */
 class RegistroHabitoService extends BaseService
 {
     public function __construct(

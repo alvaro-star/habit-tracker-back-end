@@ -38,9 +38,12 @@ php artisan test --compact
 php artisan test --filter=HabitoApiTest                     # uma classe ou método de teste
 php artisan test tests/Feature/Habits/HabitoApiTest.php     # um arquivo
 vendor/bin/pint --dirty            # formata os arquivos PHP alterados (Laravel Pint)
+composer lint                      # confere o estilo (pint --test) e a análise estática (Larastan, nível 5)
 php artisan route:list --path=api
 php artisan migrate:fresh --seed
 ```
+
+Rode `composer lint` e os testes antes de concluir uma tarefa; o workflow `.github/workflows/ci.yml` roda os dois em cada PR. O `composer lint` não altera arquivos: corrija o estilo com `vendor/bin/pint`. O Larastan analisa `app/` (`phpstan.neon`); corrija a causa dos erros em vez de ignorá-los. Repositories e services novos declaram o model no docblock (`/** @extends BaseRepository<Habito> */`, `/** @extends BaseService<Habito> */`).
 
 Os testes usam PHPUnit (não Pest). Crie-os com `php artisan make:test Habits/HabitoApiTest --phpunit`. O `phpunit.xml` roda os testes em SQLite em memória, então os testes não precisam do Postgres; evite SQL exclusivo do Postgres nas migrations e queries, ou os testes quebram. O trait `tests/Concerns/VerificaCrudDaApi` percorre o CRUD completo de um recurso (criar, listar, consultar, PATCH, excluir e 404).
 

@@ -22,6 +22,7 @@ class ConfigNotificacao extends Model
         ];
     }
 
+    /** @return BelongsTo<GatilhoNotificacao, $this> */
     public function gatilho(): BelongsTo
     {
         return $this->belongsTo(GatilhoNotificacao::class, 'fk_id_gatilho');

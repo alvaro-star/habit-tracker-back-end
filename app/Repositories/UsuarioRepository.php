@@ -6,6 +6,7 @@ use App\Models\User;
 use Carbon\CarbonInterface;
 use Closure;
 
+/** @extends BaseRepository<User> */
 class UsuarioRepository extends BaseRepository
 {
     protected string $model = User::class;

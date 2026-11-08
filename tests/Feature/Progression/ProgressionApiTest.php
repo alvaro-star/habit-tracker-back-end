@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\XpDiario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\VerificaCrudDaApi;
 use Tests\TestCase;
 
@@ -107,7 +108,7 @@ class ProgressionApiTest extends TestCase
         ];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('intervalosInvalidos')]
+    #[DataProvider('intervalosInvalidos')]
     public function test_recusa_intervalo_invalido(string $consulta, array $campos): void
     {
         $this->getJson("/api/progression/daily-xp?{$consulta}")
