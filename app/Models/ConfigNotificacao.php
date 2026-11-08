@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ConfigNotificacao extends Model
 {
@@ -19,5 +20,10 @@ class ConfigNotificacao extends Model
         return [
             'ativo' => 'boolean',
         ];
+    }
+
+    public function gatilho(): BelongsTo
+    {
+        return $this->belongsTo(GatilhoNotificacao::class, 'fk_id_gatilho');
     }
 }

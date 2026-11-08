@@ -12,6 +12,8 @@ erDiagram
         varchar(255) password "NOT NULL"
         varchar(100) remember_token
         int xp_vitalicio "NOT NULL · default 0"
+        timestamp ultimo_acesso
+        int streak_atual "NOT NULL · default 0"
         bigint fk_id_dragao FK "→ dragao (dragão ativo) · on delete set null"
         timestamp created_at
         timestamp updated_at
@@ -49,6 +51,7 @@ erDiagram
         int peso "NOT NULL · 1 a 20 · default 5"
         boolean ativo "NOT NULL · default true"
         timestamp inactivated_at "quando foi desativado"
+        time horario_lembrete
         timestamp created_at "NOT NULL · default now"
     }
     registro_habito {
@@ -176,10 +179,7 @@ Previstas pelo escopo e pelo DER original, mas ainda sem migration. Entram no ba
 
 | Tabela | Coluna | Tipo | Módulo |
 |---|---|---|---|
-| `users` | `streak_atual` | int | MOD7 / MOD8 (sequência e streak em risco) |
 | `users` | `maior_streak` | int | MOD7 |
-| `users` | `ultimo_acesso` | timestamp | MOD8 (inatividade de 3 e 7 dias) |
 | `users` | `onboarding_concluido` | boolean | MOD8 (onboarding) |
 | `habito` | `fk_id_modelo` | bigint → `habito_modelo` | MOD2 (hábito criado da biblioteca) |
-| `habito` | `horario_lembrete` | time | MOD8 (lembrete diário) |
 | `habito` | `inicio_abstinencia` | timestamp | MOD3-TASK4 / MOD7-TASK9 (hábitos ruins) |

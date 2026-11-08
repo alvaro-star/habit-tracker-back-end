@@ -22,6 +22,7 @@ class RegistroHabitoService extends BaseService
         RegistroHabitoRepository $repositorio,
         protected HabitoRepository $habitos,
         protected XpDiarioService $xpDiario,
+        protected StreakService $streaks,
     ) {
         parent::__construct($repositorio);
     }
@@ -66,6 +67,7 @@ class RegistroHabitoService extends BaseService
 
             // O XP do dia fica sempre gravado em xp_diario, inclusive o de hoje.
             $this->xpDiario->recalcularDia($usuario, $data);
+            $this->streaks->atualizar($usuario->id);
 
             return $registro;
         });

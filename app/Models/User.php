@@ -47,6 +47,8 @@ class User extends Authenticatable
             'password' => 'hashed',
             'xp_vitalicio' => 'integer',
             'fk_id_dragao' => 'integer',
+            'ultimo_acesso' => 'datetime',
+            'streak_atual' => 'integer',
         ];
     }
 }
