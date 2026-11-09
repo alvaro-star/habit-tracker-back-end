@@ -17,7 +17,11 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
 
-/** @property XpDiarioRepository $repositorio */
+/**
+ * @property XpDiarioRepository $repositorio
+ *
+ * @extends BaseService<XpDiario>
+ */
 class XpDiarioService extends BaseService
 {
     public function __construct(
@@ -79,7 +83,7 @@ class XpDiarioService extends BaseService
 
         $xp = $this->xpDoDia($usuario->id, $data);
         $registro = $this->repositorio->doUsuarioNoDia($usuario->id, $data);
-        $diferenca = $xp['xp'] - ($registro?->xp_ganho ?? 0);
+        $diferenca = $xp['xp'] - ($registro->xp_ganho ?? 0);
 
         $valores = [
             'fk_id_dragao' => $usuario->fk_id_dragao,

@@ -5,6 +5,7 @@ namespace App\Repositories;
 use App\Models\EscolhaElemento;
 use Illuminate\Database\Eloquent\Builder;
 
+/** @extends BaseRepository<EscolhaElemento> */
 class EscolhaElementoRepository extends BaseRepository
 {
     protected string $model = EscolhaElemento::class;

@@ -38,9 +38,12 @@ php artisan test --compact
 php artisan test --filter=HabitoApiTest                     # uma classe ou método de teste
 php artisan test tests/Feature/Habits/HabitoApiTest.php     # um arquivo
 vendor/bin/pint --dirty            # formata os arquivos PHP alterados (Laravel Pint)
+composer lint                      # confere o estilo (pint --test) e a análise estática (Larastan, nível 5)
 php artisan route:list --path=api
 php artisan migrate:fresh --seed
 ```
+
+Rode `composer lint` e os testes antes de concluir uma tarefa; o workflow `.github/workflows/ci.yml` roda os dois em cada PR. O `composer lint` não altera arquivos: corrija o estilo com `vendor/bin/pint`. O Larastan analisa `app/` (`phpstan.neon`); corrija a causa dos erros em vez de ignorá-los. Repositories e services novos declaram o model no docblock (`/** @extends BaseRepository<Habito> */`, `/** @extends BaseService<Habito> */`).
 
 Os testes usam PHPUnit (não Pest). Crie-os com `php artisan make:test Habits/HabitoApiTest --phpunit`. O `phpunit.xml` roda os testes em SQLite em memória, então os testes não precisam do Postgres; evite SQL exclusivo do Postgres nas migrations e queries, ou os testes quebram. O trait `tests/Concerns/VerificaCrudDaApi` percorre o CRUD completo de um recurso (criar, listar, consultar, PATCH, excluir e 404).
 
@@ -104,6 +107,8 @@ Comportamentos transversais:
 - **Dragão ativo (MOD6):** o usuário pode ter vários dragões, mas só um `ATIVO`, guardado em `users.fk_id_dragao` (fora do `Fillable`). O `DragaoService` devolve 422 em `status` ao criar ou ativar um segundo dragão ativo, aponta o `fk_id_dragao` para o dragão ao criá-lo ou ativá-lo e o limpa ao aposentá-lo (a FK limpa sozinha ao excluir). O XP de hoje usa esse dragão.
 - **XP vitalício (MOD5):** `users.xp_vitalicio` (padrão 0) fica fora do `Fillable` do `User`; só as regras do MOD5 devem alterá-lo.
 - **Níveis (MOD5-TASK6 e TASK7):** não há tabela de níveis. O `NivelService` (que não estende `BaseService`) calcula tudo sem banco: `curva()` gera os intervalos dos 30 níveis a partir de `config/progression.php` (`niveis`): nível 1 em 0 XP, cada um dos 29 passos seguintes ~10% maior, nível 30 em 9.000 XP; `nivelDoXp($xp)` devolve o nível de um XP. `User::getNivel()` usa o `nivelDoXp()` com o `xp_vitalicio`, calculado na hora (não é coluna).
+- **Sequência (MOD8):** `users.streak_atual` conta os dias seguidos com ao menos um check-in `CONCLUIDO`; hoje ainda sem conclusão não quebra a sequência. O `StreakService` recalcula pelo histórico a cada check-in e no job de streak, que também zera quem já a perdeu.
+- **Notificações (MOD8-TASK4 a TASK6):** os jobs `EnviarAvisosDeStreakEmRisco` (a cada 15 min) e `EnviarNotificacoesDeReengajamento` (de hora em hora), agendados em `routes/console.php`, chamam o `NotificacaoService`, que grava em `notifications` pelo canal `database` (`GatilhoNotification`, com o tipo do gatilho na coluna `type`). Ainda não há provedor de push; o usuário lê em `GET /api/notifications`. Os textos vêm dos gatilhos do `GatilhoNotificacaoSeeder`: sem eles, nada é enviado. O aviso de streak sai uma vez por dia, a partir do `config_notificacao.horario` ou de `config/notifications.php` (em UTC). A inatividade usa `users.ultimo_acesso` (ou o `created_at`, se nunca acessou), gravado pelo middleware `RegistrarUltimoAcesso`, e dispara uma vez por período: 3 ou 7 dias. A configuração fica em `GET /api/notifications/settings` e `PUT /api/notifications/settings/{id do gatilho}`; sem linha gravada, o gatilho está ativo.
 - **Usuário logado:** `GET /api/user` usa `Api/Auth/UsuarioController` e devolve o `UsuarioResource`, com o `xp_vitalicio`, o `fk_id_dragao` (dragão ativo) e o `nivel` (número, de `getNivel()`) anexado na resposta.
 
 ## Módulos

@@ -4,10 +4,12 @@ namespace App\Services;
 
 use App\DTOs\DTO;
 use App\Models\Dragao;
+use App\Models\EscolhaElemento;
 use App\Repositories\DragaoRepository;
 use App\Repositories\EscolhaElementoRepository;
 use Illuminate\Database\Eloquent\Model;
 
+/** @extends BaseService<EscolhaElemento> */
 class EscolhaElementoService extends BaseService
 {
     public function __construct(

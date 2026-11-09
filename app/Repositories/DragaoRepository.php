@@ -7,6 +7,7 @@ use App\Enums\StatusDragao;
 use App\Models\Dragao;
 use App\Models\User;
 
+/** @extends BaseRepository<Dragao> */
 class DragaoRepository extends BaseRepository
 {
     protected string $model = Dragao::class;

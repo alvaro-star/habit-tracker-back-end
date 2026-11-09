@@ -9,6 +9,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
+/** @extends BaseRepository<Habito> */
 class HabitoRepository extends BaseRepository
 {
     protected string $model = Habito::class;

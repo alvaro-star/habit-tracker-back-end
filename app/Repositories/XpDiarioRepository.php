@@ -6,6 +6,7 @@ use App\Models\XpDiario;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
 
+/** @extends BaseRepository<XpDiario> */
 class XpDiarioRepository extends BaseRepository
 {
     protected string $model = XpDiario::class;

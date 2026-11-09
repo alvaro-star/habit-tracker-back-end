@@ -7,28 +7,37 @@ use App\Repositories\BaseRepository;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 
+/** @template TModel of Model */
 abstract class BaseService
 {
+    /** @param BaseRepository<TModel> $repositorio */
     public function __construct(protected BaseRepository $repositorio) {}
 
-    /** @return Collection<int, Model> */
+    /** @return Collection<int, TModel> */
     public function listar(): Collection
     {
         return $this->repositorio->todos();
     }
 
+    /** @return TModel */
     public function buscar(int|string $id): Model
     {
         return $this->repositorio->buscarOuFalhar($id);
     }
 
-    /** @param array<string, mixed>|DTO $dados */
+    /**
+     * @param  array<string, mixed>|DTO  $dados
+     * @return TModel
+     */
     public function criar(array|DTO $dados): Model
     {
         return $this->repositorio->criar($this->paraArray($dados));
     }
 
-    /** @param array<string, mixed>|DTO $dados */
+    /**
+     * @param  array<string, mixed>|DTO  $dados
+     * @return TModel
+     */
     public function atualizar(int|string $id, array|DTO $dados): Model
     {
         return $this->repositorio->atualizar($this->repositorio->buscarOuFalhar($id), $this->paraArray($dados));
@@ -41,12 +50,13 @@ abstract class BaseService
 
     // Dados pessoais: as operações abaixo só enxergam os registros do usuário.
 
-    /** @return Collection<int, Model> */
+    /** @return Collection<int, TModel> */
     public function listarDoUsuario(int $usuarioId): Collection
     {
         return $this->repositorio->doUsuario($usuarioId);
     }
 
+    /** @return TModel */
     public function buscarDoUsuario(int $usuarioId, int|string $id): Model
     {
         return $this->repositorio->buscarDoUsuarioOuFalhar($usuarioId, $id);
@@ -56,13 +66,17 @@ abstract class BaseService
      * Cria um registro já vinculado ao usuário (coluna fk_id_usuario).
      *
      * @param  array<string, mixed>|DTO  $dados
+     * @return TModel
      */
     public function criarParaUsuario(int $usuarioId, array|DTO $dados): Model
     {
         return $this->repositorio->criar([...$this->paraArray($dados), 'fk_id_usuario' => $usuarioId]);
     }
 
-    /** @param array<string, mixed>|DTO $dados */
+    /**
+     * @param  array<string, mixed>|DTO  $dados
+     * @return TModel
+     */
     public function atualizarDoUsuario(int $usuarioId, int|string $id, array|DTO $dados): Model
     {
         return $this->repositorio->atualizar($this->buscarDoUsuario($usuarioId, $id), $this->paraArray($dados));

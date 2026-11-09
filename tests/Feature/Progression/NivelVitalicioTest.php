@@ -7,6 +7,7 @@ use App\Services\NivelService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class NivelVitalicioTest extends TestCase
@@ -55,7 +56,7 @@ class NivelVitalicioTest extends TestCase
         ];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('xpENivel')]
+    #[DataProvider('xpENivel')]
     public function test_nivel_do_xp_pelos_intervalos(int $xp, int $nivel): void
     {
         $this->assertSame($nivel, app(NivelService::class)->nivelDoXp($xp));

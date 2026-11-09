@@ -2,12 +2,16 @@
 
 namespace Tests\Feature\Habits;
 
+use App\Enums\Frequencia;
+use App\Exceptions\RegraDeNegocioException;
 use App\Models\Categoria;
 use App\Models\Habito;
 use App\Models\RegistroHabito;
 use App\Models\User;
+use App\Services\HabitoService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class HabitoApiTest extends TestCase
@@ -62,7 +66,7 @@ class HabitoApiTest extends TestCase
         ];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('pesosEDificuldades')]
+    #[DataProvider('pesosEDificuldades')]
     public function test_o_peso_define_a_dificuldade(int $peso, string $dificuldade): void
     {
         Sanctum::actingAs(User::factory()->create());
@@ -84,7 +88,7 @@ class HabitoApiTest extends TestCase
         ];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('pesosInvalidos')]
+    #[DataProvider('pesosInvalidos')]
     public function test_recusa_peso_fora_de_1_a_20(mixed $peso): void
     {
         Sanctum::actingAs(User::factory()->create());
@@ -105,9 +109,9 @@ class HabitoApiTest extends TestCase
 
     public function test_service_recusa_peso_acima_de_20_sem_passar_pela_request(): void
     {
-        $this->expectException(\App\Exceptions\RegraDeNegocioException::class);
+        $this->expectException(RegraDeNegocioException::class);
 
-        app(\App\Services\HabitoService::class)->criar([
+        app(HabitoService::class)->criar([
             'fk_id_usuario' => User::factory()->create()->id,
             'fk_id_categoria' => Categoria::create(['nome' => 'Geral'])->id,
             'nome' => 'Ler',
@@ -292,7 +296,7 @@ class HabitoApiTest extends TestCase
             ->assertJsonValidationErrors(['frequencia']);
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('diasFrequenciaInvalidos')]
+    #[DataProvider('diasFrequenciaInvalidos')]
     public function test_post_recusa_dia_frequencia_incompativel(string $frequencia, mixed $dia): void
     {
         Sanctum::actingAs(User::factory()->create());
@@ -337,9 +341,9 @@ class HabitoApiTest extends TestCase
 
     public function test_service_recusa_frequencia_invalida_com_excecao_de_regra_de_negocio(): void
     {
-        $this->expectException(\App\Exceptions\RegraDeNegocioException::class);
+        $this->expectException(RegraDeNegocioException::class);
 
-        app(\App\Services\HabitoService::class)->validarFrequencia(\App\Enums\Frequencia::SEMANAL, 31);
+        app(HabitoService::class)->validarFrequencia(Frequencia::SEMANAL, 31);
     }
 
     public function test_lista_habitos_que_devem_ser_cumpridos_no_dia(): void
@@ -408,7 +412,7 @@ class HabitoApiTest extends TestCase
         ];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('datasInvalidas')]
+    #[DataProvider('datasInvalidas')]
     public function test_habitos_do_dia_recusa_data_inexistente(string $data): void
     {
         Sanctum::actingAs(User::factory()->create());
@@ -495,5 +499,18 @@ class HabitoApiTest extends TestCase
         // Excluir de novo não falha, e o hábito pode ser reativado.
         $this->deleteJson("/api/habits/{$habito->id}")->assertNoContent();
         $this->patchJson("/api/habits/{$habito->id}", ['ativo' => true])->assertOk()->assertJsonPath('data.ativo', true);
+    }
+
+    public function test_aceita_e_valida_o_horario_do_lembrete(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->postJson('/api/habits', $this->payload(['horario_lembrete' => '07:30']))
+            ->assertCreated()
+            ->assertJsonPath('data.horario_lembrete', '07:30');
+
+        $this->postJson('/api/habits', $this->payload(['horario_lembrete' => '7h30']))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['horario_lembrete']);
     }
 }

@@ -16,7 +16,11 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
-/** @property HabitoRepository $repositorio */
+/**
+ * @property HabitoRepository $repositorio
+ *
+ * @extends BaseService<Habito>
+ */
 class HabitoService extends BaseService
 {
     public function __construct(
@@ -185,7 +189,7 @@ class HabitoService extends BaseService
      * desativado sai dele (o XP de hoje sobe): o XP de hoje é recalculado e a
      * diferença é aplicada ao dragão e ao usuário.
      */
-    private function comXpDeHojeAtualizado(Model $habito): Model
+    private function comXpDeHojeAtualizado(Habito $habito): Habito
     {
         $this->xpDiario->atualizarXpDeHoje($habito->fk_id_usuario);
 
@@ -201,7 +205,7 @@ class HabitoService extends BaseService
      */
     private function comFrequenciaValidada(array $dados, ?Habito $atual = null): array
     {
-        $frequencia = Frequencia::from($dados['frequencia'] ?? $atual?->frequencia ?? Frequencia::DIARIA->value);
+        $frequencia = Frequencia::from($dados['frequencia'] ?? $atual->frequencia ?? Frequencia::DIARIA->value);
 
         if ($frequencia === Frequencia::DIARIA && ! array_key_exists('dia_frequencia', $dados)) {
             $dados['dia_frequencia'] = null;

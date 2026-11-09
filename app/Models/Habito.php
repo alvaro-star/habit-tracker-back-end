@@ -25,6 +25,7 @@ class Habito extends Model
         'dificuldade',
         'peso',
         'ativo',
+        'horario_lembrete',
         // Preenchido pelo HabitoService ao desativar o hábito; não vem da requisição.
         'inactivated_at',
     ];

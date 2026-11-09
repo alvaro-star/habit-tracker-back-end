@@ -2,15 +2,17 @@
 
 namespace Tests\Feature\CheckIns;
 
+use App\Enums\EstagioDragao;
 use App\Models\Categoria;
 use App\Models\Dragao;
 use App\Models\Habito;
 use App\Models\RegistroHabito;
 use App\Models\User;
-use App\Models\XpDiario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -72,7 +74,7 @@ class RegistroHabitoApiTest extends TestCase
     }
 
     /** @param array<string, mixed> $extra */
-    private function marcar(Habito $habito, string $data, array $extra = []): \Illuminate\Testing\TestResponse
+    private function marcar(Habito $habito, string $data, array $extra = []): TestResponse
     {
         return $this->postJson('/api/check-ins', [
             'fk_id_habito' => $habito->id,
@@ -83,7 +85,7 @@ class RegistroHabitoApiTest extends TestCase
         ]);
     }
 
-    private function desmarcar(Habito $habito, string $data): \Illuminate\Testing\TestResponse
+    private function desmarcar(Habito $habito, string $data): TestResponse
     {
         return $this->postJson('/api/check-ins', ['fk_id_habito' => $habito->id, 'data' => $data, 'checked' => false]);
     }
@@ -148,7 +150,7 @@ class RegistroHabitoApiTest extends TestCase
         ];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('cumprimentoPorValor')]
+    #[DataProvider('cumprimentoPorValor')]
     public function test_tempo_e_quantidade_calculam_o_status_pelo_valor(string $tipo, ?float $meta, ?float $valor, string $status, string $percentual): void
     {
         $habito = $this->habitoDe($this->usuario, tipoMeta: $tipo, valorMeta: $meta);
@@ -223,11 +225,11 @@ class RegistroHabitoApiTest extends TestCase
         // 110 + 25 = 135 XP no ciclo: passa do marco de 120 (filhote).
         $this->marcar($habito, '2026-11-05')->assertCreated();
         $this->assertSame(135, $this->dragao->refresh()->xp_ciclo);
-        $this->assertSame(\App\Enums\EstagioDragao::FILHOTE, $this->dragao->estagio);
+        $this->assertSame(EstagioDragao::FILHOTE, $this->dragao->estagio);
 
         // Desmarcar volta a 110 XP e ao ovo.
         $this->desmarcar($habito, '2026-11-05')->assertNoContent();
-        $this->assertSame(\App\Enums\EstagioDragao::OVO, $this->dragao->refresh()->estagio);
+        $this->assertSame(EstagioDragao::OVO, $this->dragao->refresh()->estagio);
     }
 
     public function test_desmarcar_exclui_o_check_in_e_desconta_o_xp(): void
@@ -391,5 +393,18 @@ class RegistroHabitoApiTest extends TestCase
     public function test_indice_de_habito_e_data_existe(): void
     {
         $this->assertTrue(Schema::hasIndex('registro_habito', ['fk_id_habito', 'data']));
+    }
+
+    public function test_check_in_atualiza_a_sequencia_do_usuario(): void
+    {
+        Sanctum::actingAs($this->usuario);
+        $habito = $this->habitoDe($this->usuario);
+
+        $this->marcar($habito, '2026-11-08')->assertCreated();
+        $this->marcar($habito, '2026-11-09')->assertCreated();
+        $this->assertSame(2, $this->usuario->refresh()->streak_atual);
+
+        $this->desmarcar($habito, '2026-11-09')->assertNoContent();
+        $this->assertSame(1, $this->usuario->refresh()->streak_atual);
     }
 }
