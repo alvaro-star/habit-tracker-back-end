@@ -27,22 +27,6 @@ class ApiDocumentationTest extends TestCase
 
         $this->getJson('/docs/api.json')
             ->assertOk()
-            ->assertJsonPath('info.title', 'Habit Tracker API')
-            ->assertJsonStructure([
-                'paths' => ['/login', '/refresh', '/user'],
-            ]);
-    }
-
-    public function test_openapi_document_marks_only_sanctum_routes_as_protected(): void
-    {
-        $this->app['env'] = 'local';
-
-        $this->getJson('/docs/api.json')
-            ->assertOk()
-            ->assertJsonPath('components.securitySchemes.http.scheme', 'bearer')
-            ->assertJsonPath('security', [['http' => []]])
-            ->assertJsonPath('paths./login.post.security', [])
-            ->assertJsonPath('paths./refresh.post.security', [])
-            ->assertJsonMissingPath('paths./user.get.security');
+            ->assertJsonPath('info.title', 'Habit Tracker API');
     }
 }

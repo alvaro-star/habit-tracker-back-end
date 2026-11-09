@@ -100,10 +100,13 @@ Regras:
 
 - Todas as rotas ficam em `auth:sanctum`, exceto cadastro e login do MOD1.
 - As pastas de módulo e as rotas seguem as convenções do Laravel, em inglês. As classes de domínio usam o nome da tabela do `docs/DER.md`, em português (`habito` → `Habito`, `HabitoService`, `HabitoController`). A exceção é o `usuario` do DER, que é a tabela `users` e o model `User`.
+- O `routes/api.php` registra `Route::pattern('id', '[0-9]+')`, e as `apiResource` mapeiam o parâmetro com `->parameters(['habits' => 'id'])`: um `{id}` não numérico cai em 404 antes do controller.
+- O `User` usa o atributo `#[Fillable]` (estilo Laravel 13) em vez da propriedade `$fillable`.
+- O histórico de migrations cria e depois remove as tabelas `nivel`, `estagio`, `ovo` e `elemento`; o schema final não tem nenhuma delas (foram substituídas pelos enums de `app/Enums`). Não recrie essas tabelas.
 - O MOD7 foge do padrão: `app/Services/Statistics/StatisticService.php` não estende `BaseService`, e as rotas são endpoints próprios, não `apiResource`.
 - O MOD8 também usa `app/Notifications` e `app/Jobs`, com o agendamento em `routes/console.php`.
 
-Estado atual: todas as tabelas do DER têm model, repository e service, e cada service tem um controller com CRUD (`apiResource`, parâmetro `{id}`) no prefixo do seu módulo, documentado no Swagger em `/docs/api`. Já existem as regras listadas em "Regras de negócio implementadas"; faltam as demais (dragão, onboarding etc.) e a autenticação real: o `Api/AuthController.php` ainda é um **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum). Ao implementar o MOD1, substitua o mock e mova-o para `Api/Auth/`, com as rotas em `routes/api/auth.php`.
+Estado atual: todas as tabelas do DER têm model, repository e service, e cada service tem um controller com CRUD (`apiResource`, parâmetro `{id}`) no prefixo do seu módulo, documentado no Swagger em `/docs/api`. As regras listadas em "Regras de negócio implementadas" (MOD3 a MOD6, histórico de XP e usuário logado) já existem; faltam as demais do escopo (onboarding etc.) e a autenticação real: o `Api/AuthController.php` ainda é um **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum), com as rotas definidas direto no `routes/api.php`. Ainda não existem `routes/api/auth.php` nem `routes/api/onboarding.php` (o MOD8 hoje só tem as notificações em `routes/api/notifications.php`). Ao implementar o MOD1, substitua o mock, mova-o para `Api/Auth/` e as rotas para `routes/api/auth.php`.
 
 ## Documentação
 
@@ -121,3 +124,4 @@ Estado atual: todas as tabelas do DER têm model, repository e service, e cada s
 ## Ferramentas
 
 - O `CLAUDE.md` tem uma descrição mais completa das mesmas convenções, se precisar de mais contexto.
+- O `opencode.json` e o `.mcp.json` ativam o MCP do Laravel Boost (`php artisan boost:mcp`), com ferramentas de inspeção do Laravel (rotas, models, queries).
