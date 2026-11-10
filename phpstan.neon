@@ -1,0 +1,9 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 5
+    paths:
+        - app/
+    # Lê o método casts() dos models (datas e enums), que não tem array shape no retorno.
+    parseModelCastsMethod: true

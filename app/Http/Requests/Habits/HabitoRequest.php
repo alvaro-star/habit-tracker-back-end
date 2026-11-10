@@ -39,6 +39,8 @@ class HabitoRequest extends ApiRequest
             'unidade' => ['nullable', 'string', 'max:20'],
             'peso' => [$obrigatorio, 'integer', 'min:'.Dificuldade::PESO_MINIMO, 'max:'.Dificuldade::PESO_MAXIMO],
             'ativo' => ['sometimes', 'boolean'],
+            /** Horário (HH:MM) do lembrete diário do hábito. */
+            'horario_lembrete' => ['nullable', 'date_format:H:i'],
             // A data de criação é gravada pelo timestamp do banco: não pode ser enviada, com nenhum dos dois nomes.
             'created_at' => ['prohibited'],
             'data_criacao' => ['prohibited'],

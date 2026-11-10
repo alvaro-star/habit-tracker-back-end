@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\DB;
  * O dragão ativo fica em users.fk_id_dragao, mantido por este service.
  *
  * @property DragaoRepository $repositorio
+ *
+ * @extends BaseService<Dragao>
  */
 class DragaoService extends BaseService
 {

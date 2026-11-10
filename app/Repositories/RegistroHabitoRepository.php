@@ -2,11 +2,13 @@
 
 namespace App\Repositories;
 
+use App\Enums\StatusRegistro;
 use App\Models\RegistroHabito;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
+/** @extends BaseRepository<RegistroHabito> */
 class RegistroHabitoRepository extends BaseRepository
 {
     protected string $model = RegistroHabito::class;
@@ -15,6 +17,23 @@ class RegistroHabitoRepository extends BaseRepository
     protected function consultaDoUsuario(int $usuarioId): Builder
     {
         return $this->consulta()->whereHas('habito', fn ($habito) => $habito->where('fk_id_usuario', $usuarioId));
+    }
+
+    /**
+     * Dias (AAAA-MM-DD) em que o usuário concluiu ao menos um hábito.
+     *
+     * @return array<int, string>
+     */
+    public function diasConcluidosDoUsuario(int $usuarioId): array
+    {
+        return $this->consultaDoUsuario($usuarioId)
+            ->where('status', StatusRegistro::CONCLUIDO->value)
+            ->toBase()
+            ->pluck('data')
+            ->map(fn ($data) => substr((string) $data, 0, 10))
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /** Check-in do hábito no dia, buscado pelo índice (fk_id_habito, data). */

@@ -30,6 +30,7 @@ class User extends Authenticatable
      * Dragão ativo do usuário (users.fk_id_dragao). Fica fora do Fillable:
      * só o DragaoService o altera, ao criar, ativar ou aposentar um dragão.
      */
+    /** @return BelongsTo<Dragao, $this> */
     public function dragaoAtivo(): BelongsTo
     {
         return $this->belongsTo(Dragao::class, 'fk_id_dragao');
@@ -51,16 +52,16 @@ class User extends Authenticatable
     {
         $this->notify(new RedefinicaoSenha($token));
     }
-
-    protected function casts(): array
+protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'xp_vitalicio' => 'integer',
             'fk_id_dragao' => 'integer',
-            'ultimo_acesso_at' => 'datetime',
+            'ultimo_acesso' => 'datetime',
             'onboarding_concluido' => 'boolean',
+            'streak_atual' => 'integer',
         ];
     }
 }

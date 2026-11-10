@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-e-testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3
+          coverage: none
+
+      - name: Instalar dependências
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Preparar o ambiente
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Lint
+        run: composer lint
+
+      - name: Testes
+        run: php artisan test --compact

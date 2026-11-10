@@ -25,6 +25,7 @@ final readonly class HabitoDTO extends DTO
         public ?string $unidade = null,
         public ?int $peso = null,
         public ?bool $ativo = null,
+        public ?string $horarioLembrete = null,
     ) {}
 
     /** @param array<string, mixed> $dados dados validados da requisição */
@@ -41,6 +42,7 @@ final readonly class HabitoDTO extends DTO
             unidade: self::texto($dados, 'unidade'),
             peso: self::inteiro($dados, 'peso'),
             ativo: self::booleano($dados, 'ativo'),
+            horarioLembrete: self::texto($dados, 'horario_lembrete'),
         );
     }
 
@@ -73,6 +75,7 @@ final readonly class HabitoDTO extends DTO
             'unidade' => $this->unidade,
             'peso' => $this->peso,
             'ativo' => $this->ativo,
+            'horario_lembrete' => $this->horarioLembrete,
         ]);
     }
 }
