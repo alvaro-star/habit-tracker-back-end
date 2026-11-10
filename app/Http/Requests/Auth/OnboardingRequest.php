@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests\Auth;
 
-use App\DTOs\Auth\OnboardingDTO;
 use App\Http\Requests\ApiRequest;
+use App\DTOs\Auth\OnboardingDTO;
 
 /**
  * @ignoreSchema O corpo é gerado por operação.
