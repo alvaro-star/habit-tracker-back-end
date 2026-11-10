@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use Database\Factories\HabitoFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Habito extends Model
 {
+    /** @use HasFactory<HabitoFactory> */
+    use HasFactory;
+
     protected $table = 'habito';
 
     const UPDATED_AT = null;
