@@ -49,7 +49,7 @@
             "@php artisan dev"
         ],
         "test": [
-            "@php artisan config:clear --ansi @no_additional_args",
+            "@php artisan config:clear --ansi",
             "@php artisan test"
         ],
         "lint": [

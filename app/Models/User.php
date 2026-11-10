@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Notifications\RedefinicaoSenha;
 use App\Services\NivelService;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -41,7 +42,17 @@ class User extends Authenticatable
         return app(NivelService::class)->nivelDoXp($this->xp_vitalicio ?? 0);
     }
 
-    protected function casts(): array
+    /**
+     * Notificação de redefinição de senha para API.
+     *
+     * Como não há rota web de redefinição (projeto somente API), o e-mail
+     * envia apenas o token para o front-end usar em POST /api/auth/reset-password.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new RedefinicaoSenha($token));
+    }
+protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
@@ -49,6 +60,7 @@ class User extends Authenticatable
             'xp_vitalicio' => 'integer',
             'fk_id_dragao' => 'integer',
             'ultimo_acesso' => 'datetime',
+            'onboarding_concluido' => 'boolean',
             'streak_atual' => 'integer',
         ];
     }
