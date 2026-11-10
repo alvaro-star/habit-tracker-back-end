@@ -24,4 +24,4 @@ final readonly class DeletarContaDTO extends DTO
             'password' => $this->password,
         ]);
     }
-}
+ }
