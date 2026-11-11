@@ -8,12 +8,37 @@ use Illuminate\Support\Facades\DB;
 class StatisticService
 {
     /**
+     * Resolve datas de início e fim com base no período (MOD7-TASK7)
+     * Opções de período: 'daily' (diário), 'weekly' (semanal), 'monthly' (mensal)
+     */
+    private function resolvePeriodDates(?string $period, ?string $startDate, ?string $endDate): array
+    {
+        $now = Carbon::now();
+
+        if ($period === 'daily') {
+            return [$now->toDateString(), $now->toDateString()];
+        }
+
+        if ($period === 'weekly') {
+            return [$now->copy()->startOfWeek()->toDateString(), $now->copy()->endOfWeek()->toDateString()];
+        }
+
+        if ($period === 'monthly') {
+            return [$now->copy()->startOfMonth()->toDateString(), $now->copy()->endOfMonth()->toDateString()];
+        }
+
+        $start = $startDate ? Carbon::parse($startDate)->toDateString() : Carbon::now()->subDays(30)->toDateString();
+        $end = $endDate ? Carbon::parse($endDate)->toDateString() : Carbon::now()->toDateString();
+
+        return [$start, $end];
+    }
+
+    /**
      * MOD7-TASK1 e TASK4: Matriz de consistência diária (Heatmap GitHub)
      */
-    public function getConsistencyMatrix(int $userId, ?string $startDate = null, ?string $endDate = null): array
+    public function getConsistencyMatrix(int $userId, ?string $period = null, ?string $startDate = null, ?string $endDate = null): array
     {
-        $start = $startDate ? Carbon::parse($startDate)->toDateString() : Carbon::now()->subMonths(3)->toDateString();
-        $end = $endDate ? Carbon::parse($endDate)->toDateString() : Carbon::now()->toDateString();
+        [$start, $end] = $this->resolvePeriodDates($period, $startDate, $endDate);
 
         return DB::table('registro_habito')
             ->join('habito', 'registro_habito.fk_id_habito', '=', 'habito.id')
@@ -22,7 +47,7 @@ class StatisticService
             ->where('registro_habito.status', 'CONCLUIDO')
             ->select('registro_habito.data', DB::raw('COUNT(*) as total_concluidos'))
             ->groupBy('registro_habito.data')
-            ->orderBy('registro_habito.data', 'asc')
+            ->orderBy('registro_habito.data', 'ASC')
             ->get()
             ->map(fn ($row) => [
                 'data' => $row->data,
@@ -34,10 +59,9 @@ class StatisticService
     /**
      * MOD7-TASK2 e TASK5: Barras empilhadas Realizado vs Não Realizado
      */
-    public function getCompletionOverview(int $userId, ?string $startDate = null, ?string $endDate = null): array
+    public function getCompletionOverview(int $userId, ?string $period = null, ?string $startDate = null, ?string $endDate = null): array
     {
-        $start = $startDate ? Carbon::parse($startDate)->toDateString() : Carbon::now()->subDays(30)->toDateString();
-        $end = $endDate ? Carbon::parse($endDate)->toDateString() : Carbon::now()->toDateString();
+        [$start, $end] = $this->resolvePeriodDates($period, $startDate, $endDate);
 
         $result = DB::table('registro_habito')
             ->join('habito', 'registro_habito.fk_id_habito', '=', 'habito.id')
@@ -61,10 +85,9 @@ class StatisticService
     /**
      * MOD7-TASK3 e TASK6: Meta vs Realizado agrupado por Categoria
      */
-    public function getGoalVsActualByCategory(int $userId, ?string $startDate = null, ?string $endDate = null): array
+    public function getGoalVsActualByCategory(int $userId, ?string $period = null, ?string $startDate = null, ?string $endDate = null): array
     {
-        $start = $startDate ? Carbon::parse($startDate)->toDateString() : Carbon::now()->subDays(30)->toDateString();
-        $end = $endDate ? Carbon::parse($endDate)->toDateString() : Carbon::now()->toDateString();
+        [$start, $end] = $this->resolvePeriodDates($period, $startDate, $endDate);
 
         return DB::table('categoria')
             ->join('habito', 'categoria.id', '=', 'habito.fk_id_categoria')
@@ -73,8 +96,6 @@ class StatisticService
                     ->whereBetween('registro_habito.data', [$start, $end]);
             })
             ->where('habito.fk_id_usuario', $userId)
-            // TODO: desconsiderar os hábitos desativados no período só a partir do inactivated_at,
-            // em vez de tirar do progresso todo hábito inativo (inclusive nos dias em que estava ativo).
             ->where('habito.ativo', true)
             ->select(
                 'categoria.id as categoria_id',
@@ -89,6 +110,37 @@ class StatisticService
                 'categoria' => $row->categoria_nome,
                 'meta' => (float) $row->total_meta,
                 'realizado' => (float) $row->total_realizado,
+            ])
+            ->toArray();
+    }
+
+    /**
+     * MOD7-TASK8: Dados para o calendário integrado
+     * Retorna os dias do mês com contagem e percentual médio de conclusão
+     */
+    public function getCalendarData(int $userId, int $year, int $month): array
+    {
+        $start = Carbon::createFromDate($year, $month, 1)->startOfMonth()->toDateString();
+        $end = Carbon::createFromDate($year, $month, 1)->endOfMonth()->toDateString();
+
+        return DB::table('registro_habito')
+            ->join('habito', 'registro_habito.fk_id_habito', '=', 'habito.id')
+            ->where('habito.fk_id_usuario', $userId)
+            ->whereBetween('registro_habito.data', [$start, $end])
+            ->select(
+                'registro_habito.data',
+                DB::raw("SUM(CASE WHEN registro_habito.status = 'CONCLUIDO' THEN 1 ELSE 0 END) as concluidos"),
+                DB::raw('COUNT(*) as total_registros'),
+                DB::raw('AVG(registro_habito.percentual) as taxa_media_cumprimento')
+            )
+            ->groupBy('registro_habito.data')
+            ->orderBy('registro_habito.data', 'ASC')
+            ->get()
+            ->map(fn ($row) => [
+                'data' => $row->data,
+                'concluidos' => (int) $row->concluidos,
+                'total' => (int) $row->total_registros,
+                'taxa_cumprimento' => round((float) $row->taxa_media_cumprimento, 2),
             ])
             ->toArray();
     }

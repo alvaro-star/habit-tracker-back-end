@@ -15,9 +15,9 @@ class StatisticController extends Controller
 
     public function matrix(Request $request): JsonResponse
     {
-        $userId = $request->user()->id;
         $data = $this->statisticService->getConsistencyMatrix(
-            $userId,
+            $request->user()->id,
+            $request->query('period'),
             $request->query('start_date'),
             $request->query('end_date')
         );
@@ -27,9 +27,9 @@ class StatisticController extends Controller
 
     public function completion(Request $request): JsonResponse
     {
-        $userId = $request->user()->id;
         $data = $this->statisticService->getCompletionOverview(
-            $userId,
+            $request->user()->id,
+            $request->query('period'),
             $request->query('start_date'),
             $request->query('end_date')
         );
@@ -39,13 +39,36 @@ class StatisticController extends Controller
 
     public function categories(Request $request): JsonResponse
     {
-        $userId = $request->user()->id;
         $data = $this->statisticService->getGoalVsActualByCategory(
-            $userId,
+            $request->user()->id,
+            $request->query('period'),
             $request->query('start_date'),
             $request->query('end_date')
         );
 
         return response()->json(['data' => $data]);
+    }
+
+    public function calendar(Request $request): JsonResponse
+    {
+        $request->validate([
+            'year' => 'nullable|integer|min:2000|max:2100',
+            'month' => 'nullable|integer|min:1|max:12',
+        ]);
+
+        $year = (int) ($request->query('year') ?? now()->year);
+        $month = (int) ($request->query('month') ?? now()->month);
+
+        $data = $this->statisticService->getCalendarData(
+            $request->user()->id,
+            $year,
+            $month
+        );
+
+        return response()->json([
+            'ano' => $year,
+            'mes' => $month,
+            'dias' => $data,
+        ]);
     }
 }
