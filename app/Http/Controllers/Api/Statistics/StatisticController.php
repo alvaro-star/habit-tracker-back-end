@@ -48,4 +48,25 @@ class StatisticController extends Controller
 
         return response()->json(['data' => $data]);
     }
+
+    public function abstinence(Request $request): JsonResponse
+    {
+        $data = $this->statisticService->getAbstinenceIndicators(
+            $request->user()->id
+        );
+
+        return response()->json(['data' => $data]);
+    }
+
+    public function focus(Request $request): JsonResponse
+    {
+        $data = $this->statisticService->getFocusPanel(
+            $request->user()->id,
+            $request->query('period'),
+            $request->query('start_date'),
+            $request->query('end_date')
+        );
+
+        return response()->json(['data' => $data]);
+    }
 }
