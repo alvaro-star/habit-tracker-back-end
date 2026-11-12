@@ -26,6 +26,8 @@ class DragaoRequest extends ApiRequest
              */
             'elemento' => ['sometimes', 'nullable', Rule::enum(ElementoDragao::class)],
             'nome' => [$obrigatorio, 'string', 'max:40'],
+            /** Ovo de que o dragão nasceu: identificador definido pelo front-end (ex.: `ovo_azul`). */
+            'ovo' => ['sometimes', 'nullable', 'string', 'max:40'],
             /** XP do ciclo. Ele define o estágio do dragão (OVO, FILHOTE, JOVEM, ADULTO, ADULTO_FINAL), que não é enviado. */
             'xp_ciclo' => [$obrigatorio, 'integer', 'min:0'],
             'status' => [$obrigatorio, Rule::enum(StatusDragao::class)],
