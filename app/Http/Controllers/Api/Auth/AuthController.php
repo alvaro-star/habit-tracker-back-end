@@ -4,10 +4,10 @@ namespace App\Http\Controllers\Api\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\CadastroRequest;
+use App\Http\Requests\Auth\DeletarContaRequest;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\OnboardingRequest;
 use App\Http\Requests\Auth\RedefinirSenhaRequest;
-use App\Http\Requests\Auth\DeletarContaRequest;
 use App\Http\Requests\Auth\SolicitarRedefinicaoSenhaRequest;
 use App\Http\Resources\Auth\AuthResource;
 use App\Services\AuthService;
