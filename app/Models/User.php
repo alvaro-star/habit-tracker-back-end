@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -36,6 +38,22 @@ class User extends Authenticatable
         return $this->belongsTo(Dragao::class, 'fk_id_dragao');
     }
 
+    /**
+     * Objetivos do usuário: as categorias que ele escolheu priorizar no onboarding (objetivo_usuario).
+     *
+     * @return BelongsToMany<Categoria, $this>
+     */
+    public function objetivos(): BelongsToMany
+    {
+        return $this->belongsToMany(Categoria::class, 'objetivo_usuario', 'fk_id_usuario', 'fk_id_categoria');
+    }
+
+    /** @return HasMany<Habito, $this> */
+    public function habitos(): HasMany
+    {
+        return $this->hasMany(Habito::class, 'fk_id_usuario');
+    }
+
     /** Nível vitalício (1 a 30) calculado pelo XP com o NivelService; não é uma coluna. */
     public function getNivel(): int
     {
@@ -52,7 +70,8 @@ class User extends Authenticatable
     {
         $this->notify(new RedefinicaoSenha($token));
     }
-protected function casts(): array
+
+    protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',

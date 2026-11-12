@@ -14,6 +14,7 @@ erDiagram
         int xp_vitalicio "NOT NULL · default 0"
         timestamp ultimo_acesso
         int streak_atual "NOT NULL · default 0"
+        boolean onboarding_concluido "NOT NULL · default false"
         bigint fk_id_dragao FK "→ dragao (dragão ativo) · on delete set null"
         timestamp created_at
         timestamp updated_at
@@ -67,6 +68,7 @@ erDiagram
         bigint fk_id_usuario FK "NOT NULL · → users · on delete cascade"
         elemento_dragao elemento "elemento atual · obrigatório a partir de 6.000 XP"
         varchar(40) nome "NOT NULL"
+        varchar(40) ovo "ovo escolhido · identificador do front-end"
         int xp_ciclo "NOT NULL"
         estagio_dragao estagio "NOT NULL · default OVO · gerado pelo xp_ciclo"
         status_dragao status "NOT NULL"
@@ -171,7 +173,8 @@ Os enums são guardados como texto (`varchar`) e validados pelos enums de `app/E
   - Um usuário pode ter vários dragões (os do Santuário, com `status = SANTUARIO`), mas só um `ATIVO`, apontado por `users.fk_id_dragao`.
   - O `estagio` é gerado pelo `xp_ciclo` e atualizado sempre que ele muda; o marco de 6.000 XP (escolha do elemento) não é um estágio.
   - O `elemento` é o elemento atual (enum `elemento_dragao`) e passa a ser obrigatório a partir dos 6.000 XP do ciclo. Cada troca gera um registro em `escolha_elemento`, que é a trajetória. O cenário de fundo e a aparência da forma final de cada elemento ficam com o front-end.
-  - Não há tabelas de ovo, de estágio nem de elemento.
+  - Não há tabelas de ovo, de estágio nem de elemento. O `ovo` é um texto livre com o identificador do ovo escolhido no onboarding, definido pelo front-end.
+- **Onboarding:** o `users.onboarding_concluido` começa `false` e vira `true` quando o usuário conclui o fluxo do primeiro acesso, que cria o dragão ativo, os hábitos iniciais e os objetivos (`objetivo_usuario`).
 
 ## Colunas planejadas
 
@@ -180,6 +183,5 @@ Previstas pelo escopo e pelo DER original, mas ainda sem migration. Entram no ba
 | Tabela | Coluna | Tipo | Módulo |
 |---|---|---|---|
 | `users` | `maior_streak` | int | MOD7 |
-| `users` | `onboarding_concluido` | boolean | MOD8 (onboarding) |
 | `habito` | `fk_id_modelo` | bigint → `habito_modelo` | MOD2 (hábito criado da biblioteca) |
 | `habito` | `inicio_abstinencia` | timestamp | MOD3-TASK4 / MOD7-TASK9 (hábitos ruins) |

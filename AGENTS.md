@@ -66,7 +66,8 @@ O Swagger (Scramble) usa o docblock do método do controller como descrição do
 - **Dragão ativo:** só um dragão `ATIVO` por usuário, guardado em `users.fk_id_dragao` pelo `DragaoService` (422 em `status` ao tentar um segundo ativo).
 - **XP vitalício:** `users.xp_vitalicio` (padrão 0) fica fora do `Fillable` do `User`.
 - **Níveis:** não há tabela de níveis. O `NivelService` calcula sem banco: `curva()` gera os intervalos dos 30 níveis de `config/progression.php` (nível 1 em 0 XP, passos ~10% maiores, nível 30 em 9.000 XP) e `nivelDoXp($xp)` devolve o nível. `User::getNivel()` o usa com o `xp_vitalicio`.
-- **Usuário logado:** `GET /api/user` (`Api/Auth/UsuarioController` + `UsuarioResource`) devolve o usuário com `xp_vitalicio`, `fk_id_dragao` e o `nivel` anexado na resposta.
+- **Onboarding:** `users.onboarding_concluido` (padrão `false`) marca o primeiro acesso. `GET /api/onboarding` devolve a situação e `POST /api/onboarding` recebe de uma vez `ovo`, `nome_dragao`, `nome_usuario`, `objetivos` e `habitos`: o `OnboardingService` cria, numa transação, o dragão ativo, um hábito diário por modelo da biblioteca, o nome e os objetivos (`objetivo_usuario`). Segunda chamada: 409. O ovo é um texto livre em `dragao.ovo` (identificador do front-end), sem tabela nem enum.
+- **Usuário logado:** `GET /api/user` (`Api/Auth/UsuarioController` + `UsuarioResource`) devolve o usuário com `xp_vitalicio`, `fk_id_dragao`, `onboarding_concluido` e o `nivel` anexado na resposta.
 
 ## Módulos e estrutura de pastas
 
@@ -109,7 +110,7 @@ Regras:
 - O MOD7 foge do padrão: `app/Services/Statistics/StatisticService.php` não estende `BaseService`, e as rotas são endpoints próprios, não `apiResource`.
 - O MOD8 também usa `app/Notifications` e `app/Jobs`, com o agendamento em `routes/console.php`.
 
-Estado atual: todas as tabelas do DER têm model, repository e service, e cada service tem um controller com CRUD (`apiResource`, parâmetro `{id}`) no prefixo do seu módulo, documentado no Swagger em `/docs/api`. As regras listadas em "Regras de negócio implementadas" (MOD3 a MOD6, histórico de XP e usuário logado) já existem; faltam as demais do escopo (onboarding etc.) e a autenticação real: o `Api/AuthController.php` ainda é um **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum), com as rotas definidas direto no `routes/api.php`. Ainda não existem `routes/api/auth.php` nem `routes/api/onboarding.php` (o MOD8 hoje só tem as notificações em `routes/api/notifications.php`). Ao implementar o MOD1, substitua o mock, mova-o para `Api/Auth/` e as rotas para `routes/api/auth.php`.
+Estado atual: todas as tabelas do DER têm model, repository e service, e cada service tem um controller com CRUD (`apiResource`, parâmetro `{id}`) no prefixo do seu módulo, documentado no Swagger em `/docs/api`. As regras listadas em "Regras de negócio implementadas" (MOD3 a MOD6, histórico de XP e usuário logado) já existem; faltam as demais do escopo e a autenticação real: o `Api/AuthController.php` ainda é um **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum), com as rotas definidas direto no `routes/api.php`. Ainda não existem `routes/api/auth.php` nem `routes/api/onboarding.php` (o MOD8 hoje só tem as notificações em `routes/api/notifications.php`). Ao implementar o MOD1, substitua o mock, mova-o para `Api/Auth/` e as rotas para `routes/api/auth.php`.
 
 ## Documentação
 
