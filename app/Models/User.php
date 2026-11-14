@@ -52,7 +52,8 @@ class User extends Authenticatable
     {
         $this->notify(new RedefinicaoSenha($token));
     }
-protected function casts(): array
+
+    protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
