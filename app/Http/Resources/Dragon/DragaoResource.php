@@ -16,6 +16,8 @@ class DragaoResource extends JsonResource
         return [
             'id' => $this->id,
             'nome' => $this->nome,
+            // Ovo escolhido no onboarding (identificador do front-end); null nos dragões sem ovo registrado.
+            'ovo' => $this->ovo,
             'xp_ciclo' => $this->xp_ciclo,
             'estagio' => $this->estagio,
             // Elemento atual: com o estágio, o front-end define o cenário e a aparência (ADULTO_FINAL).

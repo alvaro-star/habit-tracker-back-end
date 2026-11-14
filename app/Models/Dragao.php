@@ -20,6 +20,8 @@ class Dragao extends Model
         // Elemento atual (ElementoDragao); cada troca entra na trajetória (escolha_elemento).
         'elemento',
         'nome',
+        // Ovo de que o dragão nasceu: identificador definido pelo front-end (não há tabela de ovo).
+        'ovo',
         'xp_ciclo',
         'status',
         // Gerado pelo DragaoService a partir do xp_ciclo; não vem da requisição.
