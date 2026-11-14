@@ -61,6 +61,7 @@ class User extends Authenticatable
             'xp_vitalicio' => 'integer',
             'fk_id_dragao' => 'integer',
             'ultimo_acesso' => 'datetime',
+            'ultimo_acesso_at' => 'datetime',
             'onboarding_concluido' => 'boolean',
             'streak_atual' => 'integer',
         ];
