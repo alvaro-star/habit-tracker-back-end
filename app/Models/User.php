@@ -52,7 +52,8 @@ class User extends Authenticatable
     {
         $this->notify(new RedefinicaoSenha($token));
     }
-protected function casts(): array
+
+    protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
@@ -60,6 +61,7 @@ protected function casts(): array
             'xp_vitalicio' => 'integer',
             'fk_id_dragao' => 'integer',
             'ultimo_acesso' => 'datetime',
+            'ultimo_acesso_at' => 'datetime',
             'onboarding_concluido' => 'boolean',
             'streak_atual' => 'integer',
         ];
