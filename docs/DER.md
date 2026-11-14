@@ -169,6 +169,7 @@ Os enums são guardados como texto (`varchar`) e validados pelos enums de `app/E
 - **XP diário (`xp_diario`):** histórico do XP de cada dia, um registro por usuário e dia, com o dragão do ciclo. É gravado pelo sistema, não pelo usuário: o registro do dia é recalculado a cada check-in e, no caso de hoje, também quando um hábito é criado ou desativado.
 - **Dragão:**
   - Um usuário pode ter vários dragões (os do Santuário, com `status = SANTUARIO`), mas só um `ATIVO`, apontado por `users.fk_id_dragao`.
+  - Ao entrar no Santuário, o dragão recebe a `data_termino` (hoje, se não foi enviada) e o `tempo_total_dias`, gerado pelas datas de nascimento e de término. Um dragão do Santuário não pode ser excluído pela API; ao ser reativado, perde a `data_termino` e o `tempo_total_dias`.
   - O `estagio` é gerado pelo `xp_ciclo` e atualizado sempre que ele muda; o marco de 6.000 XP (escolha do elemento) não é um estágio.
   - O `elemento` é o elemento atual (enum `elemento_dragao`) e passa a ser obrigatório a partir dos 6.000 XP do ciclo. Cada troca gera um registro em `escolha_elemento`, que é a trajetória. O cenário de fundo e a aparência da forma final de cada elemento ficam com o front-end.
   - Não há tabelas de ovo, de estágio nem de elemento.
