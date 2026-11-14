@@ -17,3 +17,4 @@ require __DIR__.'/api/progression.php';
 require __DIR__.'/api/dragon.php';
 require __DIR__.'/api/statistics.php';
 require __DIR__.'/api/notifications.php';
+require __DIR__.'/api/onboarding.php';
