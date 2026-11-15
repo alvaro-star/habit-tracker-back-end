@@ -65,7 +65,6 @@ class HabitoFactory extends Factory
         return $this->state(fn () => ['polaridade' => Polaridade::RUIM->value]);
     }
 
-    /** Meta de tempo, em minutos (a unidade do TEMPO é sempre minutos). */
     public function deTempo(float $minutos = 30): static
     {
         return $this->state(fn () => [
