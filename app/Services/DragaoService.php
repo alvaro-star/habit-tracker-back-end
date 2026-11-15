@@ -25,6 +25,9 @@ use Illuminate\Support\Facades\DB;
  */
 class DragaoService extends BaseService
 {
+    /** Nome do ovo chocado no renascimento; o usuário pode trocá-lo depois. */
+    public const NOME_NOVO_OVO = 'Novo ovo';
+
     public function __construct(
         DragaoRepository $repositorio,
         protected EscolhaElementoRepository $escolhas,
@@ -72,7 +75,8 @@ class DragaoService extends BaseService
             $this->sincronizarDragaoAtivo($usuarioId, $dragao);
             $this->registrarTrajetoria($dragao, $elementoAnterior);
 
-            return $dragao;
+            // Ex.: o usuário escolheu o elemento depois de passar dos 9.000 XP.
+            return $this->renascerSeConcluiuCiclo($dragao->id) !== null ? $dragao->refresh() : $dragao;
         });
     }
 
@@ -92,6 +96,46 @@ class DragaoService extends BaseService
         }
 
         return $this->repositorio->excluir($dragao);
+    }
+
+    /**
+     * Renascimento (MOD6-TASK12 a TASK17): o dragão ATIVO que chegou à forma
+     * adulta final (9.000 XP do ciclo) e já tem elemento vai para o Santuário
+     * (com a data de término e o tempo total do ciclo), e um novo ovo é chocado
+     * como dragão ATIVO, com o XP do ciclo zerado. O XP vitalício (e o nível)
+     * e as insígnias do usuário não mudam. Sem elemento, o renascimento espera
+     * a escolha (a forma final depende do elemento). Chamado quando o XP do
+     * ciclo sobe (XpDiarioService::recalcularDia) e ao editar o dragão.
+     *
+     * @return Dragao|null o novo ovo, ou null se o ciclo ainda não terminou
+     */
+    public function renascerSeConcluiuCiclo(int $dragaoId): ?Dragao
+    {
+        /** @var Dragao $dragao */
+        $dragao = $this->repositorio->buscarOuFalhar($dragaoId);
+
+        if ($dragao->status !== StatusDragao::ATIVO
+            || $dragao->estagio !== EstagioDragao::ADULTO_FINAL
+            || $dragao->elemento === null) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($dragao) {
+            $usuarioId = $dragao->fk_id_usuario;
+
+            $this->repositorio->atualizar($dragao, $this->comDadosDoSantuario(['status' => StatusDragao::SANTUARIO->value], $dragao));
+            $this->repositorio->definirDragaoAtivo($usuarioId, null);
+
+            /** @var Dragao $novoOvo */
+            $novoOvo = $this->criarParaUsuario($usuarioId, [
+                'nome' => self::NOME_NOVO_OVO,
+                'xp_ciclo' => 0,
+                'status' => StatusDragao::ATIVO->value,
+                'data_nascimento' => CarbonImmutable::today()->toDateString(),
+            ]);
+
+            return $novoOvo;
+        });
     }
 
     /**
