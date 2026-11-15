@@ -144,4 +144,87 @@ class StatisticService
             ])
             ->toArray();
     }
+
+    /**
+     * MOD7-TASK9: Contador de Abstinência para hábitos ruins (S5 RF-04)
+     */
+    public function getAbstinenceIndicators(int $userId): array
+    {
+        $now = Carbon::now();
+
+        $badHabits = DB::table('habito')
+            ->where('fk_id_usuario', $userId)
+            ->where('polaridade', 'RUIM')
+            ->where('ativo', true)
+            ->select('id', 'nome', 'created_at')
+            ->get();
+
+        return $badHabits->map(function ($habit) use ($now) {
+            $lastRelapse = DB::table('registro_habito')
+                ->where('fk_id_habito', $habit->id)
+                ->where(function ($query) {
+                    $query->where('status', 'CONCLUIDO')
+                        ->orWhere('valor_realizado', '>', 0);
+                })
+                ->orderBy('data', 'DESC')
+                ->value('data');
+
+            $referenceDate = $lastRelapse
+                ? Carbon::parse($lastRelapse)->endOfDay()
+                : ($habit->created_at ? Carbon::parse($habit->created_at) : $now);
+
+            if ($referenceDate->greaterThan($now)) {
+                $referenceDate = $now->copy()->startOfDay();
+            }
+
+            $daysClean = (int) $referenceDate->diffInDays($now);
+            $hoursClean = (int) $referenceDate->diffInHours($now);
+
+            return [
+                'habito_id' => $habit->id,
+                'nome' => $habit->nome,
+                'inicio_abstinencia' => $referenceDate->toDateTimeString(),
+                'dias_consecutivos' => $daysClean,
+                'horas_totais' => $hoursClean,
+            ];
+        })->toArray();
+    }
+
+    /**
+     * MOD7-TASK10: Painel de Foco e Produtividade (S5 RF-05)
+     */
+    public function getFocusPanel(int $userId, ?string $period = null, ?string $startDate = null, ?string $endDate = null): array
+    {
+        [$start, $end] = $this->resolvePeriodDates($period, $startDate, $endDate);
+
+        $records = DB::table('registro_habito')
+            ->join('habito', 'registro_habito.fk_id_habito', '=', 'habito.id')
+            ->where('habito.fk_id_usuario', $userId)
+            ->where('habito.tipo_meta', 'TEMPO')
+            ->whereBetween('registro_habito.data', [$start, $end])
+            ->select(
+                'habito.id as habito_id',
+                'habito.nome as habito_nome',
+                DB::raw('COALESCE(SUM(registro_habito.valor_realizado), 0) as minutos_dedicados')
+            )
+            ->groupBy('habito.id', 'habito.nome')
+            ->get();
+
+        $totalMinutes = (int) $records->sum('minutos_dedicados');
+        $hours = intdiv($totalMinutes, 60);
+        $remainingMinutes = $totalMinutes % 60;
+
+        return [
+            'periodo' => ['inicio' => $start, 'fim' => $end],
+            'total_minutos' => $totalMinutes,
+            'horas' => $hours,
+            'minutos' => $remainingMinutes,
+            'formatado' => "{$hours}h {$remainingMinutes}m",
+            'por_habito' => $records->map(fn ($row) => [
+                'habito_id' => $row->habito_id,
+                'nome' => $row->habito_nome,
+                'minutos' => (int) $row->minutos_dedicados,
+            ])->toArray(),
+        ];
+    }
 }

@@ -10,6 +10,8 @@ use App\Exceptions\RegraDeNegocioException;
 use App\Models\Dragao;
 use App\Repositories\DragaoRepository;
 use App\Repositories\EscolhaElementoRepository;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
@@ -33,7 +35,7 @@ class DragaoService extends BaseService
     /** @param array<string, mixed>|DTO $dados */
     public function criarParaUsuario(int $usuarioId, array|DTO $dados): Model
     {
-        $dados = $this->paraArray($dados);
+        $dados = $this->comDadosDoSantuario($this->paraArray($dados), null);
 
         return DB::transaction(function () use ($usuarioId, $dados) {
             if ($this->ativo($dados['status'] ?? null)) {
@@ -61,6 +63,7 @@ class DragaoService extends BaseService
 
             /** @var Dragao $atual */
             $atual = $this->buscarDoUsuario($usuarioId, $id);
+            $dados = $this->comDadosDoSantuario($dados, $atual);
             $this->garantirElementoAposEscolha($dados, $atual);
             $elementoAnterior = $atual->elemento;
 
@@ -71,6 +74,86 @@ class DragaoService extends BaseService
 
             return $dragao;
         });
+    }
+
+    /**
+     * O Santuário é permanente (MOD6-TASK19): um dragão do Santuário não pode
+     * ser excluído pela API. Um dragão ativo continua podendo ser excluído.
+     *
+     * @throws RegraDeNegocioException respondida como 422
+     */
+    public function excluirDoUsuario(int $usuarioId, int|string $id): bool
+    {
+        /** @var Dragao $dragao */
+        $dragao = $this->buscarDoUsuario($usuarioId, $id);
+
+        if ($dragao->status === StatusDragao::SANTUARIO) {
+            throw new RegraDeNegocioException('id', 'O dragão está no Santuário e não pode ser excluído.');
+        }
+
+        return $this->repositorio->excluir($dragao);
+    }
+
+    /**
+     * Santuário do usuário (MOD6-TASK18): os dragões que concluíram o ciclo,
+     * do término mais recente para o mais antigo, com a trajetória de elementos.
+     *
+     * @return Collection<int, Dragao>
+     */
+    public function santuario(int $usuarioId): Collection
+    {
+        return $this->repositorio->doSantuario($usuarioId);
+    }
+
+    /** Um dragão do Santuário do usuário; um dragão ativo ou de outro usuário devolve 404. */
+    public function buscarNoSantuario(int $usuarioId, int|string $id): Dragao
+    {
+        return $this->repositorio->buscarDoSantuarioOuFalhar($usuarioId, $id);
+    }
+
+    /**
+     * Ao entrar no Santuário, o dragão recebe a data de término (hoje, se não
+     * foi enviada) e o tempo total do ciclo, sempre gerado pelas datas de
+     * nascimento e de término: um tempo_total_dias enviado é descartado.
+     * Ao ser reativado, o dragão perde a data de término e o tempo total.
+     *
+     * @param  array<string, mixed>  $dados
+     * @return array<string, mixed>
+     *
+     * @throws RegraDeNegocioException 422 se o término for anterior ao nascimento
+     */
+    private function comDadosDoSantuario(array $dados, ?Dragao $atual): array
+    {
+        $noSantuario = array_key_exists('status', $dados)
+            ? ! $this->ativo($dados['status'])
+            : $atual?->status === StatusDragao::SANTUARIO;
+
+        if (! $noSantuario) {
+            if ($atual?->status === StatusDragao::SANTUARIO) {
+                $dados['data_termino'] = null;
+                $dados['tempo_total_dias'] = null;
+            }
+
+            return $dados;
+        }
+
+        $nascimento = $dados['data_nascimento'] ?? $atual?->data_nascimento;
+
+        if ($nascimento === null) {
+            return $dados;
+        }
+
+        $nascimento = CarbonImmutable::parse($nascimento)->startOfDay();
+        $termino = CarbonImmutable::parse($dados['data_termino'] ?? $atual->data_termino ?? CarbonImmutable::today())->startOfDay();
+
+        if ($termino->lt($nascimento)) {
+            throw new RegraDeNegocioException('data_termino', 'A data de término não pode ser anterior à data de nascimento do dragão ('.$nascimento->toDateString().').');
+        }
+
+        $dados['data_termino'] = $termino->toDateString();
+        $dados['tempo_total_dias'] = (int) $nascimento->diffInDays($termino);
+
+        return $dados;
     }
 
     /**
