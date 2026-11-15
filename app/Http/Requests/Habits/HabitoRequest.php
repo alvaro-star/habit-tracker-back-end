@@ -35,7 +35,13 @@ class HabitoRequest extends ApiRequest
              * (ex.: o dia 31 não aparece em abril, junho, setembro, novembro nem fevereiro).
              */
             'dia_frequencia' => ['nullable', new DiaFrequenciaValido],
-            'valor_meta' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
+            /**
+             * Meta positiva (MOD3-TASK3): quanto o usuário quer fazer por dia nas metas de TEMPO
+             * (em minutos) e de QUANTIDADE (na unidade do hábito). Deve ser maior que zero e só
+             * existe nos hábitos BOM: um hábito RUIM com valor_meta devolve 422, e na REALIZACAO
+             * o valor é descartado. Sem meta, qualquer valor registrado no check-in conclui o hábito.
+             */
+            'valor_meta' => ['nullable', 'numeric', 'gt:0', 'max:99999999.99'],
             /**
              * Unidade da meta, definida pelo usuário só nas metas de QUANTIDADE (ex.: copos,
              * páginas, km, R$), com até 20 caracteres. Nas metas de TEMPO a unidade é sempre
@@ -44,6 +50,12 @@ class HabitoRequest extends ApiRequest
             'unidade' => ['nullable', 'string', 'max:20'],
             'peso' => [$obrigatorio, 'integer', 'min:'.Dificuldade::PESO_MINIMO, 'max:'.Dificuldade::PESO_MAXIMO],
             'ativo' => ['sometimes', 'boolean'],
+            /**
+             * Só nos hábitos RUIM (MOD3-TASK4): desde quando o usuário está sem praticar o hábito
+             * (data ou data e hora, até agora). Sem ele, a contagem começa no cadastro ou no
+             * momento em que o hábito vira RUIM. Nos hábitos BOM o valor é descartado.
+             */
+            'inicio_abstinencia' => ['nullable', 'date', 'before_or_equal:now'],
             /** Horário (HH:MM) do lembrete diário do hábito. */
             'horario_lembrete' => ['nullable', 'date_format:H:i'],
             // A data de criação é gravada pelo timestamp do banco: não pode ser enviada, com nenhum dos dois nomes.

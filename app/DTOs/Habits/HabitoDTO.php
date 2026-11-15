@@ -7,6 +7,7 @@ use App\Enums\DiaSemana;
 use App\Enums\Frequencia;
 use App\Enums\Polaridade;
 use App\Enums\TipoMeta;
+use Carbon\CarbonImmutable;
 
 /**
  * A dificuldade e a data de criação não fazem parte da entrada: a dificuldade
@@ -26,6 +27,7 @@ final readonly class HabitoDTO extends DTO
         public ?int $peso = null,
         public ?bool $ativo = null,
         public ?string $horarioLembrete = null,
+        public ?CarbonImmutable $inicioAbstinencia = null,
     ) {}
 
     /** @param array<string, mixed> $dados dados validados da requisição */
@@ -43,6 +45,7 @@ final readonly class HabitoDTO extends DTO
             peso: self::inteiro($dados, 'peso'),
             ativo: self::booleano($dados, 'ativo'),
             horarioLembrete: self::texto($dados, 'horario_lembrete'),
+            inicioAbstinencia: self::data($dados, 'inicio_abstinencia'),
         );
     }
 
@@ -76,6 +79,7 @@ final readonly class HabitoDTO extends DTO
             'peso' => $this->peso,
             'ativo' => $this->ativo,
             'horario_lembrete' => $this->horarioLembrete,
+            'inicio_abstinencia' => $this->inicioAbstinencia?->toDateTimeString(),
         ]);
     }
 }
