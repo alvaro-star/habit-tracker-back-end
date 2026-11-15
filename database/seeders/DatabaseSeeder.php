@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -11,17 +10,15 @@ class DatabaseSeeder extends Seeder
     use WithoutModelEvents;
 
     /**
-     * Seed the application's database.
+     * Catálogos (gatilhos de notificação e biblioteca de hábitos) e os dados do
+     * servidor de testes, com o usuário admin@gmail.com / senha123.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        $this->call([
+            GatilhoNotificacaoSeeder::class,
+            BibliotecaSeeder::class,
+            DadosDeTesteSeeder::class,
         ]);
-
-        $this->call(GatilhoNotificacaoSeeder::class);
     }
 }
