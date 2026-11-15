@@ -8,6 +8,10 @@ Route::pattern('id', '[0-9]+');
 
 require __DIR__.'/api/auth.php';
 
+Route::post('/refresh', [AuthController::class, 'refresh']);
+
+require __DIR__.'/api/statistics.php';
+
 Route::get('/user', [UsuarioController::class, 'show'])->middleware('auth:sanctum');
 
 require __DIR__.'/api/library.php';

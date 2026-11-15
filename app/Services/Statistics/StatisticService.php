@@ -116,6 +116,7 @@ class StatisticService
 
     /**
      * MOD7-TASK8: Dados para o calendário integrado
+     * Retorna os dias do mês com contagem e percentual médio de conclusão
      */
     public function getCalendarData(int $userId, int $year, int $month): array
     {
