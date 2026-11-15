@@ -36,6 +36,11 @@ class HabitoRequest extends ApiRequest
              */
             'dia_frequencia' => ['nullable', new DiaFrequenciaValido],
             'valor_meta' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
+            /**
+             * Unidade da meta, definida pelo usuário só nas metas de QUANTIDADE (ex.: copos,
+             * páginas, km, R$), com até 20 caracteres. Nas metas de TEMPO a unidade é sempre
+             * "minutos" e na REALIZACAO não há unidade: o valor enviado é descartado.
+             */
             'unidade' => ['nullable', 'string', 'max:20'],
             'peso' => [$obrigatorio, 'integer', 'min:'.Dificuldade::PESO_MINIMO, 'max:'.Dificuldade::PESO_MAXIMO],
             'ativo' => ['sometimes', 'boolean'],
