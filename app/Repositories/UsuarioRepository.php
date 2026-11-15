@@ -22,6 +22,19 @@ class UsuarioRepository extends BaseRepository
         $usuario->forceFill(['xp_vitalicio' => max(0, $usuario->xp_vitalicio + $diferenca)])->save();
     }
 
+    /**
+     * Grava o nome e os objetivos (categorias) escolhidos no onboarding e marca
+     * o onboarding como concluído. Usa forceFill porque o onboarding_concluido
+     * fica fora do Fillable.
+     *
+     * @param  array<int, int>  $categoriaIds
+     */
+    public function concluirOnboarding(User $usuario, string $nome, array $categoriaIds): void
+    {
+        $usuario->forceFill(['name' => $nome, 'onboarding_concluido' => true])->save();
+        $usuario->objetivos()->sync($categoriaIds);
+    }
+
     /** Não usa o Eloquent para não mexer no updated_at, já que o perfil não mudou. */
     public function registrarAcesso(int $usuarioId): void
     {

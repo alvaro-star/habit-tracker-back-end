@@ -18,6 +18,7 @@ final readonly class DragaoDTO extends DTO
         public ?CarbonImmutable $dataTermino = null,
         public ?string $arteFinalUrl = null,
         public ?int $tempoTotalDias = null,
+        public ?string $ovo = null,
     ) {}
 
     /** @param array<string, mixed> $dados dados validados da requisição */
@@ -32,6 +33,7 @@ final readonly class DragaoDTO extends DTO
             dataTermino: self::data($dados, 'data_termino'),
             arteFinalUrl: self::texto($dados, 'arte_final_url'),
             tempoTotalDias: self::inteiro($dados, 'tempo_total_dias'),
+            ovo: self::texto($dados, 'ovo'),
         );
     }
 
@@ -40,6 +42,7 @@ final readonly class DragaoDTO extends DTO
         return $this->semNulos([
             'elemento' => $this->elemento?->value,
             'nome' => $this->nome,
+            'ovo' => $this->ovo,
             'xp_ciclo' => $this->xpCiclo,
             'status' => $this->status?->value,
             'data_nascimento' => $this->dataNascimento?->toDateString(),
