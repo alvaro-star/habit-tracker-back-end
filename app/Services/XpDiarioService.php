@@ -31,6 +31,8 @@ class XpDiarioService extends BaseService
         protected RegistroHabitoRepository $registros,
         protected DragaoRepository $dragoes,
         protected UsuarioRepository $usuarios,
+        // Renascimento ao chegar aos 9.000 XP do ciclo; o DragaoService não depende deste service.
+        protected DragaoService $ciclo,
     ) {
         parent::__construct($repositorio);
     }
@@ -100,6 +102,10 @@ class XpDiarioService extends BaseService
         if ($diferenca !== 0) {
             $this->dragoes->somarXpCiclo($usuario->fk_id_dragao, $diferenca);
             $this->usuarios->somarXpVitalicio($usuario->id, $diferenca);
+        }
+
+        if ($diferenca > 0) {
+            $this->ciclo->renascerSeConcluiuCiclo($usuario->fk_id_dragao);
         }
 
         return $diferenca;
