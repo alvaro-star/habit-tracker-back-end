@@ -47,7 +47,7 @@ class StatisticService
             ->where('registro_habito.status', 'CONCLUIDO')
             ->select('registro_habito.data', DB::raw('COUNT(*) as total_concluidos'))
             ->groupBy('registro_habito.data')
-            ->orderBy('registro_habito.data', 'ASC')
+            ->orderBy('registro_habito.data', 'asc')
             ->get()
             ->map(fn ($row) => [
                 'data' => $row->data,
@@ -134,7 +134,7 @@ class StatisticService
                 DB::raw('AVG(registro_habito.percentual) as taxa_media_cumprimento')
             )
             ->groupBy('registro_habito.data')
-            ->orderBy('registro_habito.data', 'ASC')
+            ->orderBy('registro_habito.data', 'asc')
             ->get()
             ->map(fn ($row) => [
                 'data' => $row->data,
@@ -166,7 +166,7 @@ class StatisticService
                     $query->where('status', 'CONCLUIDO')
                         ->orWhere('valor_realizado', '>', 0);
                 })
-                ->orderBy('data', 'DESC')
+                ->orderBy('data', 'desc')
                 ->value('data');
 
             $referenceDate = $lastRelapse

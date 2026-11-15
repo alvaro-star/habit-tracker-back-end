@@ -1,0 +1,76 @@
+name: Deploy no VPS
+
+# A cada atualização da main, o servidor de testes baixa o código novo e recria
+# o container da API. Também pode ser disparado à mão pela aba Actions.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Um deploy por vez; um push novo cancela o deploy anterior que ainda não terminou.
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Pasta do clone do projeto no VPS.
+      PASTA_DO_PROJETO: /var/www/habit-tracker-back-end
+    steps:
+      - name: Configurar o acesso SSH ao VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -t ed25519 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Atualizar o código e recriar o container da API
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$VPS_USER@$VPS_HOST" bash -s -- "$PASTA_DO_PROJETO" <<'EOF'
+          set -euo pipefail
+          cd "$1"
+
+          echo "::group::Atualizar o código"
+          git fetch --prune origin main
+          git checkout main
+          git reset --hard origin/main
+          git log -1 --oneline
+          echo "::endgroup::"
+
+          echo "::group::Recriar o container da API"
+          docker compose up -d --build --force-recreate app
+          echo "::endgroup::"
+
+          echo "::group::Migrations"
+          docker compose exec -T app php artisan migrate --force
+          echo "::endgroup::"
+
+          docker image prune -f
+          docker compose ps
+          EOF
+
+      - name: Verificar se a API respondeu
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          for tentativa in $(seq 1 10); do
+            if curl -fsS -o /dev/null "http://$VPS_HOST:8080/up"; then
+              echo "API no ar."
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "A API não respondeu em http://$VPS_HOST:8080/up" >&2
+          exit 1
