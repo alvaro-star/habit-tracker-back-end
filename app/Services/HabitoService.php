@@ -6,6 +6,7 @@ use App\DTOs\DTO;
 use App\Enums\DiaSemana;
 use App\Enums\Dificuldade;
 use App\Enums\Frequencia;
+use App\Enums\TipoMeta;
 use App\Exceptions\RegraDeNegocioException;
 use App\Models\Habito;
 use App\Repositories\HabitoRepository;
@@ -34,7 +35,7 @@ class HabitoService extends BaseService
     public function criar(array|DTO $dados): Model
     {
         return DB::transaction(fn () => $this->comXpDeHojeAtualizado(
-            $this->repositorio->criar($this->comFrequenciaValidada($this->paraArray($dados))),
+            $this->repositorio->criar($this->comUnidadeDoTipoDeMeta($this->comFrequenciaValidada($this->paraArray($dados)))),
         ));
     }
 
@@ -42,7 +43,7 @@ class HabitoService extends BaseService
     public function criarParaUsuario(int $usuarioId, array|DTO $dados): Model
     {
         return DB::transaction(fn () => $this->comXpDeHojeAtualizado($this->repositorio->criar([
-            ...$this->comFrequenciaValidada($this->paraArray($dados)),
+            ...$this->comUnidadeDoTipoDeMeta($this->comFrequenciaValidada($this->paraArray($dados))),
             'fk_id_usuario' => $usuarioId,
         ])));
     }
@@ -55,7 +56,7 @@ class HabitoService extends BaseService
         $dados = $this->comDataDeInativacao($this->paraArray($dados), $habito);
         $this->garantirTipoMetaEditavel($dados, $habito);
 
-        return $this->repositorio->atualizar($habito, $this->comFrequenciaValidada($dados, $habito));
+        return $this->repositorio->atualizar($habito, $this->comUnidadeDoTipoDeMeta($this->comFrequenciaValidada($dados, $habito), $habito));
     }
 
     /** @param array<string, mixed>|DTO $dados */
@@ -66,7 +67,7 @@ class HabitoService extends BaseService
         $dados = $this->comDataDeInativacao($this->paraArray($dados), $habito);
         $this->garantirTipoMetaEditavel($dados, $habito);
 
-        return $this->repositorio->atualizar($habito, $this->comFrequenciaValidada($dados, $habito));
+        return $this->repositorio->atualizar($habito, $this->comUnidadeDoTipoDeMeta($this->comFrequenciaValidada($dados, $habito), $habito));
     }
 
     /**
@@ -216,6 +217,42 @@ class HabitoService extends BaseService
 
         if ($dia !== null) {
             $dados['dia_frequencia'] = $dia instanceof DiaSemana ? $dia->value : (string) $dia;
+        }
+
+        return $dados;
+    }
+
+    /**
+     * A unidade depende do tipo de meta (MOD3-TASK8): só a QUANTIDADE aceita
+     * uma unidade definida pelo usuário (copos, páginas, R$...). No TEMPO ela é
+     * sempre minutos e na REALIZACAO não há unidade: uma unidade enviada para
+     * esses tipos é descartada, como a dificuldade. Ao trocar um hábito para
+     * QUANTIDADE sem enviar a unidade, a unidade antiga (minutos) é apagada.
+     *
+     * @param  array<string, mixed>  $dados
+     * @return array<string, mixed>
+     */
+    private function comUnidadeDoTipoDeMeta(array $dados, ?Habito $atual = null): array
+    {
+        $tipo = $dados['tipo_meta'] ?? $atual->tipo_meta ?? null;
+
+        if ($tipo === null) {
+            return $dados;
+        }
+
+        $tipo = $tipo instanceof TipoMeta ? $tipo : TipoMeta::from($tipo);
+
+        if (! $tipo->aceitaUnidadeCustomizada()) {
+            $dados['unidade'] = $tipo->unidadeFixa();
+
+            return $dados;
+        }
+
+        if (array_key_exists('unidade', $dados)) {
+            $unidade = trim((string) $dados['unidade']);
+            $dados['unidade'] = $unidade === '' ? null : $unidade;
+        } elseif ($atual !== null && $atual->tipo_meta !== $tipo->value) {
+            $dados['unidade'] = null;
         }
 
         return $dados;
