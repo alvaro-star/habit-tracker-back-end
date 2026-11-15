@@ -1,6 +1,5 @@
 <?php
 
-use Dedoc\Scramble\Http\Middleware\RestrictedDocsAccess;
 use Dedoc\Scramble\OpenApiVersion;
 use Dedoc\Scramble\SecurityDocumentation\MiddlewareAuthSecurityStrategy;
 
@@ -155,9 +154,12 @@ return [
      */
     'flatten_deep_query_parameters' => true,
 
+    /*
+     * A documentação é pública em todos os ambientes (local, de testes e produção):
+     * sem o RestrictedDocsAccess, que só a liberava com APP_ENV=local.
+     */
     'middleware' => [
         'web',
-        RestrictedDocsAccess::class,
     ],
 
     'extensions' => [],
