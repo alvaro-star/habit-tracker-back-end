@@ -60,9 +60,14 @@ class HabitoFactory extends Factory
         ]);
     }
 
-    public function ruim(): static
+    /** Hábito ruim: sem meta positiva e com a abstinência contando desde a data informada (padrão: agora). */
+    public function ruim(\DateTimeInterface|string|null $inicioAbstinencia = null): static
     {
-        return $this->state(fn () => ['polaridade' => Polaridade::RUIM->value]);
+        return $this->state(fn () => [
+            'polaridade' => Polaridade::RUIM->value,
+            'valor_meta' => null,
+            'inicio_abstinencia' => $inicioAbstinencia ?? now(),
+        ]);
     }
 
     public function deTempo(float $minutos = 30): static

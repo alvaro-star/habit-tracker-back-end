@@ -6,6 +6,7 @@ use App\DTOs\DTO;
 use App\Enums\DiaSemana;
 use App\Enums\Dificuldade;
 use App\Enums\Frequencia;
+use App\Enums\Polaridade;
 use App\Enums\TipoMeta;
 use App\Exceptions\RegraDeNegocioException;
 use App\Models\Habito;
@@ -35,7 +36,7 @@ class HabitoService extends BaseService
     public function criar(array|DTO $dados): Model
     {
         return DB::transaction(fn () => $this->comXpDeHojeAtualizado(
-            $this->repositorio->criar($this->comUnidadeDoTipoDeMeta($this->comFrequenciaValidada($this->paraArray($dados)))),
+            $this->repositorio->criar($this->comRegrasDaMeta($this->comFrequenciaValidada($this->paraArray($dados)))),
         ));
     }
 
@@ -43,7 +44,7 @@ class HabitoService extends BaseService
     public function criarParaUsuario(int $usuarioId, array|DTO $dados): Model
     {
         return DB::transaction(fn () => $this->comXpDeHojeAtualizado($this->repositorio->criar([
-            ...$this->comUnidadeDoTipoDeMeta($this->comFrequenciaValidada($this->paraArray($dados))),
+            ...$this->comRegrasDaMeta($this->comFrequenciaValidada($this->paraArray($dados))),
             'fk_id_usuario' => $usuarioId,
         ])));
     }
@@ -56,7 +57,7 @@ class HabitoService extends BaseService
         $dados = $this->comDataDeInativacao($this->paraArray($dados), $habito);
         $this->garantirTipoMetaEditavel($dados, $habito);
 
-        return $this->repositorio->atualizar($habito, $this->comUnidadeDoTipoDeMeta($this->comFrequenciaValidada($dados, $habito), $habito));
+        return $this->repositorio->atualizar($habito, $this->comRegrasDaMeta($this->comFrequenciaValidada($dados, $habito), $habito));
     }
 
     /** @param array<string, mixed>|DTO $dados */
@@ -67,7 +68,7 @@ class HabitoService extends BaseService
         $dados = $this->comDataDeInativacao($this->paraArray($dados), $habito);
         $this->garantirTipoMetaEditavel($dados, $habito);
 
-        return $this->repositorio->atualizar($habito, $this->comUnidadeDoTipoDeMeta($this->comFrequenciaValidada($dados, $habito), $habito));
+        return $this->repositorio->atualizar($habito, $this->comRegrasDaMeta($this->comFrequenciaValidada($dados, $habito), $habito));
     }
 
     /**
@@ -220,6 +221,109 @@ class HabitoService extends BaseService
         }
 
         return $dados;
+    }
+
+    /**
+     * Regras da meta que dependem do tipo de meta e da polaridade: a unidade
+     * (MOD3-TASK8), a meta positiva (MOD3-TASK3) e o início da abstinência dos
+     * hábitos ruins (MOD3-TASK4). Num PATCH, completa com o que já está salvo.
+     *
+     * @param  array<string, mixed>  $dados
+     * @return array<string, mixed>
+     *
+     * @throws RegraDeNegocioException respondida como 422
+     */
+    private function comRegrasDaMeta(array $dados, ?Habito $atual = null): array
+    {
+        $dados = $this->comUnidadeDoTipoDeMeta($dados, $atual);
+
+        $polaridade = $this->enumOuNulo(Polaridade::class, $dados['polaridade'] ?? $atual->polaridade ?? Polaridade::BOM);
+        $tipo = $this->enumOuNulo(TipoMeta::class, $dados['tipo_meta'] ?? $atual->tipo_meta ?? null);
+
+        return $this->comInicioDaAbstinencia($this->comMetaPositiva($dados, $polaridade, $tipo), $polaridade, $atual);
+    }
+
+    /**
+     * Meta positiva (MOD3-TASK3): o valor_meta é o quanto o usuário quer fazer
+     * e só existe nos hábitos BOM de TEMPO ou QUANTIDADE, sempre maior que zero
+     * (uma meta zero vira "sem meta").
+     * Na REALIZACAO não há meta numérica (o valor é descartado). Um hábito RUIM
+     * não tem meta positiva: enviar valor_meta devolve 422, e um hábito que
+     * vira RUIM perde a meta que tinha.
+     *
+     * @param  array<string, mixed>  $dados
+     * @return array<string, mixed>
+     *
+     * @throws RegraDeNegocioException respondida como 422
+     */
+    private function comMetaPositiva(array $dados, Polaridade $polaridade, ?TipoMeta $tipo): array
+    {
+        $meta = $dados['valor_meta'] ?? null;
+
+        if ($polaridade === Polaridade::RUIM) {
+            if ($meta !== null) {
+                throw new RegraDeNegocioException('valor_meta', 'Hábitos ruins não têm meta positiva: o progresso deles é o tempo sem praticar.');
+            }
+
+            $dados['valor_meta'] = null;
+
+            return $dados;
+        }
+
+        // Meta zero é o mesmo que nenhuma meta. A request recusa zero (gt:0); aqui ele só
+        // chega por chamadas internas, como o onboarding com a meta_padrao 0 de um modelo.
+        if ($tipo === TipoMeta::REALIZACAO || ($meta !== null && (float) $meta <= 0)) {
+            $dados['valor_meta'] = null;
+        }
+
+        return $dados;
+    }
+
+    /**
+     * Início da abstinência (MOD3-TASK4): só os hábitos RUIM o têm. Ao cadastrar
+     * um hábito ruim (ou transformar um hábito bom em ruim) sem enviar a data,
+     * a contagem começa agora; uma data futura devolve 422. Nos hábitos BOM o
+     * campo fica nulo.
+     *
+     * @param  array<string, mixed>  $dados
+     * @return array<string, mixed>
+     *
+     * @throws RegraDeNegocioException respondida como 422
+     */
+    private function comInicioDaAbstinencia(array $dados, Polaridade $polaridade, ?Habito $atual): array
+    {
+        if ($polaridade === Polaridade::BOM) {
+            $dados['inicio_abstinencia'] = null;
+
+            return $dados;
+        }
+
+        $inicio = $dados['inicio_abstinencia'] ?? null;
+
+        if ($inicio !== null) {
+            if (CarbonImmutable::parse($inicio)->isFuture()) {
+                throw new RegraDeNegocioException('inicio_abstinencia', 'O início da abstinência não pode ser no futuro.');
+            }
+        } elseif ($atual === null || ! $atual->ehRuim()) {
+            $dados['inicio_abstinencia'] = now();
+        }
+
+        return $dados;
+    }
+
+    /**
+     * @template T of BackedEnum
+     *
+     * @param  class-string<T>  $enum
+     * @return T|null
+     */
+    private function enumOuNulo(string $enum, mixed $valor): ?BackedEnum
+    {
+        if ($valor === null || $valor instanceof $enum) {
+            return $valor;
+        }
+
+        return $enum::from($valor instanceof BackedEnum ? $valor->value : $valor);
     }
 
     /**

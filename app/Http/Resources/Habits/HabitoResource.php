@@ -32,6 +32,10 @@ class HabitoResource extends JsonResource
             // O Postgres devolve HH:MM:SS; a API usa sempre HH:MM.
             'horario_lembrete' => $this->horario_lembrete !== null ? substr($this->horario_lembrete, 0, 5) : null,
             'inactivated_at' => $this->inactivated_at,
+            // Contador de abstinência (MOD3-TASK4): só nos hábitos RUIM; nulos nos hábitos BOM.
+            'inicio_abstinencia' => $this->inicio_abstinencia,
+            'ultima_recaida' => $this->ultimaRecaida()?->toDateString(),
+            'dias_sem_praticar' => $this->diasSemPraticar(),
             'created_at' => $this->created_at,
         ];
     }

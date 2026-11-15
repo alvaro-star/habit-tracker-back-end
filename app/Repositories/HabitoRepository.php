@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Enums\DiaSemana;
 use App\Enums\Frequencia;
+use App\Enums\StatusRegistro;
 use App\Models\Habito;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
@@ -13,6 +14,21 @@ use Illuminate\Database\Eloquent\Collection;
 class HabitoRepository extends BaseRepository
 {
     protected string $model = Habito::class;
+
+    /**
+     * Os hábitos do usuário já vêm com a data da última recaída (o check-in
+     * mais recente que não seja NAO_CONCLUIDO), usada pelo contador de
+     * abstinência dos hábitos ruins sem uma query por hábito.
+     *
+     * @return Builder<Habito>
+     */
+    protected function consultaDoUsuario(int $usuarioId): Builder
+    {
+        return parent::consultaDoUsuario($usuarioId)->withMax(
+            ['registros as ultima_recaida' => fn (Builder $registros) => $registros->where('status', '!=', StatusRegistro::NAO_CONCLUIDO->value)],
+            'data',
+        );
+    }
 
     /** Diz se o hábito já tem algum check-in (registro_habito). */
     public function temRegistros(Habito $habito): bool

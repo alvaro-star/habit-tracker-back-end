@@ -52,6 +52,7 @@ erDiagram
         int peso "NOT NULL · 1 a 20 · default 5"
         boolean ativo "NOT NULL · default true"
         timestamp inactivated_at "quando foi desativado"
+        timestamp inicio_abstinencia "só hábitos RUIM"
         time horario_lembrete
         timestamp created_at "NOT NULL · default now"
     }
@@ -167,6 +168,7 @@ Os enums são guardados como texto (`varchar`) e validados pelos enums de `app/E
   - A `dificuldade` é gerada pelo `peso` (1 a 20).
   - O `created_at` vem só do banco.
   - Excluir um hábito só o desativa (`ativo = false` e `inactivated_at`), mantendo os check-ins.
+  - O `inicio_abstinencia` só existe nos hábitos `RUIM` (MOD3-TASK4): é desde quando o usuário está sem praticar o hábito. O contador de dias sem praticar é calculado com ele e com o último check-in que não seja `NAO_CONCLUIDO` (a recaída).
 - **Check-in (`registro_habito`):** um registro por hábito e dia, buscado pelo índice (`fk_id_habito`, `data`). O status e o percentual dependem do `tipo_meta` do hábito: em `TEMPO` e `QUANTIDADE` são calculados comparando `valor_realizado` com o `valor_meta`.
 - **XP diário (`xp_diario`):** histórico do XP de cada dia, um registro por usuário e dia, com o dragão do ciclo. É gravado pelo sistema, não pelo usuário: o registro do dia é recalculado a cada check-in e, no caso de hoje, também quando um hábito é criado ou desativado.
 - **Dragão:**
@@ -185,4 +187,3 @@ Previstas pelo escopo e pelo DER original, mas ainda sem migration. Entram no ba
 |---|---|---|---|
 | `users` | `maior_streak` | int | MOD7 |
 | `habito` | `fk_id_modelo` | bigint → `habito_modelo` | MOD2 (hábito criado da biblioteca) |
-| `habito` | `inicio_abstinencia` | timestamp | MOD3-TASK4 / MOD7-TASK9 (hábitos ruins) |
