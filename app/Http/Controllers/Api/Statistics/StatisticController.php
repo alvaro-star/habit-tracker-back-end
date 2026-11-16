@@ -72,10 +72,23 @@ class StatisticController extends Controller
         ]);
     }
 
+    /**
+     * Contador de abstinência dos hábitos ruins.
+     *
+     * A contagem começa no `inicio_abstinencia` do hábito ou no dia seguinte à última
+     * recaída (qualquer check-in que não seja `NAO_CONCLUIDO`), o que for mais recente:
+     * é o mesmo `dias_sem_praticar` de `GET /api/habits`. O bloco `periodo` resume o
+     * intervalo de `period` (`daily`, `weekly`, `monthly`, `yearly`) ou
+     * `start_date`/`end_date` (padrão: últimos 30 dias), contando só os dias a partir
+     * do `inicio_abstinencia` e até hoje.
+     */
     public function abstinence(Request $request): JsonResponse
     {
         $data = $this->statisticService->getAbstinenceIndicators(
-            $request->user()->id
+            $request->user()->id,
+            $request->query('period'),
+            $request->query('start_date'),
+            $request->query('end_date')
         );
 
         return response()->json(['data' => $data]);

@@ -2,14 +2,20 @@
 
 namespace App\Services\Statistics;
 
+use App\Enums\StatusRegistro;
+use App\Models\Habito;
+use App\Repositories\HabitoRepository;
 use Carbon\Carbon;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 class StatisticService
 {
+    public function __construct(protected HabitoRepository $habitos) {}
+
     /**
      * Resolve datas de início e fim com base no período (MOD7-TASK7)
-     * Opções de período: 'daily' (diário), 'weekly' (semanal), 'monthly' (mensal)
+     * Opções de período: 'daily' (diário), 'weekly' (semanal), 'monthly' (mensal), 'yearly' (anual)
      */
     private function resolvePeriodDates(?string $period, ?string $startDate, ?string $endDate): array
     {
@@ -25,6 +31,10 @@ class StatisticService
 
         if ($period === 'monthly') {
             return [$now->copy()->startOfMonth()->toDateString(), $now->copy()->endOfMonth()->toDateString()];
+        }
+
+        if ($period === 'yearly') {
+            return [$now->copy()->startOfYear()->toDateString(), $now->copy()->endOfYear()->toDateString()];
         }
 
         $start = $startDate ? Carbon::parse($startDate)->toDateString() : Carbon::now()->subDays(30)->toDateString();
@@ -147,47 +157,99 @@ class StatisticService
 
     /**
      * MOD7-TASK9: Contador de Abstinência para hábitos ruins (S5 RF-04)
+     *
+     * Usa a mesma regra do MOD3 (Habito::marcoDaAbstinencia e diasSemPraticar):
+     * a contagem começa no inicio_abstinencia ou no dia seguinte à última recaída,
+     * e recaída é qualquer check-in que não seja NAO_CONCLUIDO. O bloco "periodo"
+     * resume o intervalo pedido (period ou start_date/end_date), considerando só
+     * os dias a partir do inicio_abstinencia e até hoje.
+     *
+     * @return array<int, array<string, mixed>>
      */
-    public function getAbstinenceIndicators(int $userId): array
+    public function getAbstinenceIndicators(int $userId, ?string $period = null, ?string $startDate = null, ?string $endDate = null): array
     {
-        $now = Carbon::now();
+        [$start, $end] = $this->resolvePeriodDates($period, $startDate, $endDate);
+        $agora = CarbonImmutable::now();
+        $habitos = $this->habitos->ruinsAtivosDoUsuario($userId);
 
-        $badHabits = DB::table('habito')
-            ->where('fk_id_usuario', $userId)
-            ->where('polaridade', 'RUIM')
-            ->where('ativo', true)
-            ->select('id', 'nome', 'created_at')
-            ->get();
+        // Uma única query com as recaídas do período de todos os hábitos ruins.
+        $recaidas = DB::table('registro_habito')
+            ->whereIn('fk_id_habito', $habitos->pluck('id'))
+            ->where('status', '!=', StatusRegistro::NAO_CONCLUIDO->value)
+            ->whereBetween('data', [$start, $end])
+            ->get(['fk_id_habito', 'data'])
+            ->groupBy('fk_id_habito')
+            ->map(fn ($registros) => $registros->map(fn ($registro) => substr((string) $registro->data, 0, 10))->unique()->sort()->values()->all());
 
-        return $badHabits->map(function ($habit) use ($now) {
-            $lastRelapse = DB::table('registro_habito')
-                ->where('fk_id_habito', $habit->id)
-                ->where(function ($query) {
-                    $query->where('status', 'CONCLUIDO')
-                        ->orWhere('valor_realizado', '>', 0);
-                })
-                ->orderBy('data', 'desc')
-                ->value('data');
-
-            $referenceDate = $lastRelapse
-                ? Carbon::parse($lastRelapse)->endOfDay()
-                : ($habit->created_at ? Carbon::parse($habit->created_at) : $now);
-
-            if ($referenceDate->greaterThan($now)) {
-                $referenceDate = $now->copy()->startOfDay();
-            }
-
-            $daysClean = (int) $referenceDate->diffInDays($now);
-            $hoursClean = (int) $referenceDate->diffInHours($now);
+        return $habitos->map(function (Habito $habito) use ($agora, $start, $end, $recaidas) {
+            $marco = $habito->marcoDaAbstinencia();
 
             return [
-                'habito_id' => $habit->id,
-                'nome' => $habit->nome,
-                'inicio_abstinencia' => $referenceDate->toDateTimeString(),
-                'dias_consecutivos' => $daysClean,
-                'horas_totais' => $hoursClean,
+                'habito_id' => $habito->id,
+                'nome' => $habito->nome,
+                'inicio_abstinencia' => $habito->inicio_abstinencia?->toDateTimeString(),
+                'ultima_recaida' => $habito->ultimaRecaida()?->toDateString(),
+                'marco_contagem' => $marco?->toDateTimeString(),
+                'dias_consecutivos' => $habito->diasSemPraticar(),
+                'horas_totais' => $marco === null ? null : ($marco->gt($agora) ? 0 : (int) $marco->diffInHours($agora)),
+                'periodo' => $this->abstinenciaNoPeriodo($habito, $start, $end, $recaidas->get($habito->id, [])),
             ];
-        })->toArray();
+        })->values()->all();
+    }
+
+    /**
+     * Resumo da abstinência no período: dias considerados (a partir do
+     * inicio_abstinencia e até hoje), dias com recaída, dias limpos, a maior
+     * sequência de dias limpos e as recaídas por mês (AAAA-MM).
+     *
+     * @param  array<int, string>  $diasComRecaida
+     * @return array<string, mixed>
+     */
+    private function abstinenciaNoPeriodo(Habito $habito, string $start, string $end, array $diasComRecaida): array
+    {
+        $inicio = CarbonImmutable::parse($start)->startOfDay();
+        $fim = CarbonImmutable::parse($end)->startOfDay();
+        $hoje = CarbonImmutable::today();
+
+        if ($habito->inicio_abstinencia !== null && $habito->inicio_abstinencia->startOfDay()->gt($inicio)) {
+            $inicio = $habito->inicio_abstinencia->startOfDay();
+        }
+
+        if ($fim->gt($hoje)) {
+            $fim = $hoje;
+        }
+
+        $recaidas = array_values(array_filter(
+            $diasComRecaida,
+            fn (string $dia) => $dia >= $inicio->toDateString() && $dia <= $fim->toDateString(),
+        ));
+        $ehRecaida = array_flip($recaidas);
+
+        $diasConsiderados = 0;
+        $maiorSequencia = 0;
+        $sequencia = 0;
+
+        for ($dia = $inicio; $dia->lte($fim); $dia = $dia->addDay()) {
+            $diasConsiderados++;
+            $sequencia = isset($ehRecaida[$dia->toDateString()]) ? 0 : $sequencia + 1;
+            $maiorSequencia = max($maiorSequencia, $sequencia);
+        }
+
+        $porMes = [];
+        foreach ($recaidas as $dia) {
+            $mes = substr($dia, 0, 7);
+            $porMes[$mes] = ($porMes[$mes] ?? 0) + 1;
+        }
+
+        return [
+            'data_inicio' => $start,
+            'data_fim' => $end,
+            'dias_considerados' => $diasConsiderados,
+            'dias_com_recaida' => count($recaidas),
+            'dias_limpos' => $diasConsiderados - count($recaidas),
+            'maior_sequencia_limpa' => $maiorSequencia,
+            'recaidas_por_mes' => (object) $porMes,
+        ];
     }
 
     /**
