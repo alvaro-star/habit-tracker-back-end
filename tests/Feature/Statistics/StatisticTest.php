@@ -105,6 +105,7 @@ class StatisticTest extends TestCase
             'tipo_meta' => 'REALIZACAO',
             'frequencia' => 'DIARIA',
             'ativo' => true,
+            'inicio_abstinencia' => now()->subDays(30),
         ]);
 
         // Simula recaída há 5 dias

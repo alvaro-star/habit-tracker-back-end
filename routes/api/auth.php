@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Auth\AuthController;
+use App\Http\Controllers\Api\Auth\UsuarioController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
@@ -11,6 +12,7 @@ Route::prefix('auth')->group(function () {
 });
 
 Route::prefix('auth')->middleware('auth:sanctum')->group(function () {
+    Route::get('my-data', [UsuarioController::class, 'show']);
     Route::post('refresh', [AuthController::class, 'refresh']);
     Route::post('logout', [AuthController::class, 'logout']);
     Route::patch('onboarding', [AuthController::class, 'onboarding']);

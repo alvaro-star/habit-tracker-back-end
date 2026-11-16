@@ -19,7 +19,7 @@ class UsuarioLogadoTest extends TestCase
         // O usuário de uma requisição real vem do banco, com o ultimo_acesso_at como texto.
         Sanctum::actingAs(User::query()->findOrFail($usuario->id));
 
-        $this->getJson('/api/user')
+        $this->getJson('/api/auth/my-data')
             ->assertOk()
             ->assertJsonPath('data.ultimo_acesso_at', '2026-11-12T10:00:00.000000Z');
     }

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\DiaSemana;
 use App\Enums\StatusRegistro;
+use App\Exceptions\RegraDeNegocioException;
 use App\Models\Habito;
 use App\Models\RegistroHabito;
 use App\Models\User;
@@ -75,7 +76,16 @@ class XpDiarioService extends BaseService
      * hábito volta os saldos ao que eram. Sem dragão ativo não há onde creditar
      * o XP (xp_diario.fk_id_dragao é obrigatório), então nada é gravado.
      *
+     * Uma diferença negativa maior que o xp_ciclo do dragão ativo devolve 422 em
+     * xp_ciclo, e quem chamou desfaz tudo (as chamadas rodam em transação). Isso
+     * acontece depois do renascimento: o XP já ganho no dia ficou com o dragão
+     * que foi para o Santuário, e o novo ovo começa com 0. Desmarcar um check-in,
+     * criar ou desativar um hábito desse dia baixaria o XP do novo ovo abaixo de
+     * zero (e, na volta, daria XP de graça), então a alteração é bloqueada.
+     *
      * @return int a diferença de XP aplicada
+     *
+     * @throws RegraDeNegocioException
      */
     public function recalcularDia(User $usuario, CarbonInterface $data): int
     {
@@ -86,6 +96,13 @@ class XpDiarioService extends BaseService
         $xp = $this->xpDoDia($usuario->id, $data);
         $registro = $this->repositorio->doUsuarioNoDia($usuario->id, $data);
         $diferenca = $xp['xp'] - ($registro->xp_ganho ?? 0);
+
+        if ($diferenca < 0 && $this->dragoes->buscarOuFalhar($usuario->fk_id_dragao)->xp_ciclo + $diferenca < 0) {
+            throw new RegraDeNegocioException(
+                'xp_ciclo',
+                'Esta alteração deixaria o XP do dragão atual negativo: o XP deste dia já foi para o dragão que concluiu o ciclo.',
+            );
+        }
 
         $valores = [
             'fk_id_dragao' => $usuario->fk_id_dragao,
@@ -109,6 +126,19 @@ class XpDiarioService extends BaseService
         }
 
         return $diferenca;
+    }
+
+    /**
+     * Pool semanal (ESCOPO.md, seção 3.3): fecha o ciclo semanal dos hábitos de
+     * frequência semanal. Disparado toda segunda-feira às 00:05 pelo scheduler
+     * (routes/console.php).
+     *
+     * TODO: ainda não implementado. Hoje os hábitos semanais contam no XP do dia
+     * em que caem (xpDoDia), e este método não faz nada.
+     */
+    public function fecharPoolSemanal(): void
+    {
+        //
     }
 
     /**

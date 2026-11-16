@@ -86,24 +86,40 @@ class Habito extends Model
     }
 
     /**
-     * Contador de abstinência (MOD3-TASK4): dias completos sem praticar o
-     * hábito ruim, contados do mais recente entre o inicio_abstinencia e o dia
-     * seguinte à última recaída. Uma recaída hoje zera o contador. Nulo nos
-     * hábitos bons.
+     * Marco de onde a abstinência é contada: o mais recente entre o
+     * inicio_abstinencia e o começo do dia seguinte à última recaída. Nulo nos
+     * hábitos bons e nos ruins sem inicio_abstinencia.
      */
-    public function diasSemPraticar(?CarbonInterface $hoje = null): ?int
+    public function marcoDaAbstinencia(): ?CarbonImmutable
     {
         if (! $this->ehRuim() || $this->inicio_abstinencia === null) {
             return null;
         }
 
-        $hoje = CarbonImmutable::parse($hoje ?? CarbonImmutable::today())->startOfDay();
-        $inicio = $this->inicio_abstinencia->startOfDay();
+        $marco = $this->inicio_abstinencia;
         $recaida = $this->ultimaRecaida();
 
-        if ($recaida !== null && $recaida->addDay()->gt($inicio)) {
-            $inicio = $recaida->addDay();
+        if ($recaida !== null && $recaida->addDay()->gt($marco)) {
+            $marco = $recaida->addDay();
         }
+
+        return $marco;
+    }
+
+    /**
+     * Contador de abstinência (MOD3-TASK4): dias completos sem praticar o
+     * hábito ruim, contados do marcoDaAbstinencia(). Uma recaída hoje zera o
+     * contador. Nulo nos hábitos bons.
+     */
+    public function diasSemPraticar(?CarbonInterface $hoje = null): ?int
+    {
+        $inicio = $this->marcoDaAbstinencia()?->startOfDay();
+
+        if ($inicio === null) {
+            return null;
+        }
+
+        $hoje = CarbonImmutable::parse($hoje ?? CarbonImmutable::today())->startOfDay();
 
         return $inicio->gt($hoje) ? 0 : (int) $inicio->diffInDays($hoje);
     }

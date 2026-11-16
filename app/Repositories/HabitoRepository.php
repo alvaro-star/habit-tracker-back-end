@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Enums\DiaSemana;
 use App\Enums\Frequencia;
+use App\Enums\Polaridade;
 use App\Enums\StatusRegistro;
 use App\Models\Habito;
 use Carbon\CarbonInterface;
@@ -28,6 +29,21 @@ class HabitoRepository extends BaseRepository
             ['registros as ultima_recaida' => fn (Builder $registros) => $registros->where('status', '!=', StatusRegistro::NAO_CONCLUIDO->value)],
             'data',
         );
+    }
+
+    /**
+     * Hábitos ruins ativos do usuário, com a ultima_recaida já carregada: a base
+     * do contador de abstinência das estatísticas (MOD7).
+     *
+     * @return Collection<int, Habito>
+     */
+    public function ruinsAtivosDoUsuario(int $usuarioId): Collection
+    {
+        return $this->consultaDoUsuario($usuarioId)
+            ->where('polaridade', Polaridade::RUIM->value)
+            ->where('ativo', true)
+            ->orderBy('id')
+            ->get();
     }
 
     /** Diz se o hábito já tem algum check-in (registro_habito). */

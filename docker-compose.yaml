@@ -29,6 +29,23 @@ services:
     depends_on:
       db-database:
         condition: service_healthy
+  # Dispara as tarefas periódicas de routes/console.php (notificações, pool semanal):
+  # mesma imagem da API, rodando o scheduler do Laravel em vez do nginx.
+  scheduler:
+    build: .
+    command: ['php', 'artisan', 'schedule:work']
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DB_HOST: host.docker.internal
+      DB_PORT: ${DB_PORT:-5433}
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    depends_on:
+      db-database:
+        condition: service_healthy
 volumes:
   dbdatamigrate:
     driver: local

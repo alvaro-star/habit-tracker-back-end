@@ -1,7 +1,7 @@
 name: Deploy no VPS
 
 # A cada atualização da main, o servidor de testes baixa o código novo e recria
-# o container da API. Também pode ser disparado à mão pela aba Actions.
+# os containers da API e do scheduler. Também pode ser disparado à mão pela aba Actions.
 on:
   push:
     branches: [main]
@@ -49,8 +49,8 @@ jobs:
           git log -1 --oneline
           echo "::endgroup::"
 
-          echo "::group::Recriar o container da API"
-          docker compose up -d --build --force-recreate app
+          echo "::group::Recriar os containers da API e do scheduler"
+          docker compose up -d --build --force-recreate app scheduler
           echo "::endgroup::"
 
           # O banco do servidor de testes é sempre destruído e recriado: todas as

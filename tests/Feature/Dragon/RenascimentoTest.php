@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Dragon;
 
+use App\Models\Categoria;
 use App\Models\Dragao;
 use App\Models\EscolhaElemento;
 use App\Models\Habito;
@@ -158,5 +159,48 @@ class RenascimentoTest extends TestCase
 
         $this->assertNull(app(DragaoService::class)->renascerSeConcluiuCiclo($antigo->id));
         $this->assertSame(2, Dragao::count());
+    }
+
+    public function test_depois_do_renascimento_desmarcar_o_check_in_de_hoje_e_bloqueado(): void
+    {
+        $this->dragao(8990);
+        $this->concluirHabitoHoje();
+        $novoOvo = Dragao::findOrFail($this->usuario->fresh()->fk_id_dragao);
+        $xpVitalicio = $this->usuario->fresh()->xp_vitalicio;
+        // Numa requisição real o usuário é recarregado; no teste, o actingAs guarda o objeto antigo.
+        Sanctum::actingAs($this->usuario->fresh());
+
+        $this->postJson('/api/check-ins', [
+            'fk_id_habito' => $this->habito->id,
+            'data' => '2026-11-15',
+            'checked' => false,
+        ])->assertUnprocessable()->assertJsonValidationErrors('xp_ciclo');
+
+        $this->assertSame(0, $novoOvo->fresh()->xp_ciclo);
+        $this->assertSame($xpVitalicio, $this->usuario->fresh()->xp_vitalicio);
+        $this->assertDatabaseHas('registro_habito', ['fk_id_habito' => $this->habito->id, 'status' => 'CONCLUIDO']);
+    }
+
+    public function test_depois_do_renascimento_criar_habito_que_cai_hoje_e_bloqueado(): void
+    {
+        $this->dragao(8990);
+        $this->concluirHabitoHoje();
+        $habito = [
+            'fk_id_categoria' => Categoria::create(['nome' => 'Saúde'])->id,
+            'nome' => 'Ler',
+            'polaridade' => 'BOM',
+            'tipo_meta' => 'REALIZACAO',
+            'peso' => 10,
+        ];
+
+        // 2026-11-15 é domingo: um hábito diário cai hoje e baixaria o XP do novo ovo.
+        $this->postJson('/api/habits', [...$habito, 'frequencia' => 'DIARIA', 'dia_frequencia' => null])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('xp_ciclo');
+        $this->assertDatabaseMissing('habito', ['nome' => 'Ler']);
+
+        // Um semanal de segunda-feira não cai hoje, então não muda o XP do dia.
+        $this->postJson('/api/habits', [...$habito, 'frequencia' => 'SEMANAL', 'dia_frequencia' => 'SEG'])
+            ->assertCreated();
     }
 }

@@ -73,7 +73,7 @@ class NivelVitalicioTest extends TestCase
         $usuario = $this->usuarioComXp(1000);
         Sanctum::actingAs($usuario);
 
-        $this->getJson('/api/user')
+        $this->getJson('/api/auth/my-data')
             ->assertOk()
             ->assertJsonPath('data.id', $usuario->id)
             ->assertJsonPath('data.xp_vitalicio', 1000)
@@ -83,6 +83,6 @@ class NivelVitalicioTest extends TestCase
 
     public function test_usuario_logado_exige_autenticacao(): void
     {
-        $this->getJson('/api/user')->assertUnauthorized();
+        $this->getJson('/api/auth/my-data')->assertUnauthorized();
     }
 }
