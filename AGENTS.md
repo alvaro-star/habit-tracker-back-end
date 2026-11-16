@@ -68,7 +68,7 @@ O Swagger (Scramble) usa o docblock do método do controller como descrição do
 - **XP vitalício:** `users.xp_vitalicio` (padrão 0) fica fora do `Fillable` do `User`.
 - **Níveis:** não há tabela de níveis. O `NivelService` calcula sem banco: `curva()` gera os intervalos dos 30 níveis de `config/progression.php` (nível 1 em 0 XP, passos ~10% maiores, nível 30 em 9.000 XP) e `nivelDoXp($xp)` devolve o nível. `User::getNivel()` o usa com o `xp_vitalicio`.
 - **Onboarding:** `users.onboarding_concluido` (padrão `false`) marca o primeiro acesso. `GET /api/onboarding` devolve a situação e `POST /api/onboarding` recebe de uma vez `ovo`, `nome_dragao`, `nome_usuario`, `objetivos` e `habitos`: o `OnboardingService` cria, numa transação, o dragão ativo, um hábito diário por modelo da biblioteca, o nome e os objetivos (`objetivo_usuario`). Segunda chamada: 409. O ovo é um texto livre em `dragao.ovo` (identificador do front-end), sem tabela nem enum.
-- **Usuário logado:** `GET /api/user` (`Api/Auth/UsuarioController` + `UsuarioResource`) devolve o usuário com `xp_vitalicio`, `fk_id_dragao`, `onboarding_concluido` e o `nivel` anexado na resposta.
+- **Usuário logado:** `GET /api/auth/my-data` (`Api/Auth/UsuarioController` + `UsuarioResource`) devolve o usuário com `xp_vitalicio`, `fk_id_dragao`, `onboarding_concluido` e o `nivel` anexado na resposta.
 
 ## Módulos e estrutura de pastas
 

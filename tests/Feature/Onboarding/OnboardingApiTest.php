@@ -90,7 +90,7 @@ class OnboardingApiTest extends TestCase
             ->assertJsonCount(0, 'data.objetivos')
             ->assertJsonCount(0, 'data.habitos');
 
-        $this->getJson('/api/user')->assertOk()->assertJsonPath('data.onboarding_concluido', false);
+        $this->getJson('/api/auth/my-data')->assertOk()->assertJsonPath('data.onboarding_concluido', false);
     }
 
     public function test_conclui_o_onboarding_com_ovo_dragao_objetivos_e_habitos(): void
@@ -141,7 +141,7 @@ class OnboardingApiTest extends TestCase
             'peso' => 15,
         ]);
 
-        $this->getJson('/api/user')->assertOk()->assertJsonPath('data.onboarding_concluido', true);
+        $this->getJson('/api/auth/my-data')->assertOk()->assertJsonPath('data.onboarding_concluido', true);
         $this->getJson('/api/onboarding')
             ->assertOk()
             ->assertJsonPath('data.concluido', true)

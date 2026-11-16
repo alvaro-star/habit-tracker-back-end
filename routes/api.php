@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Api\Auth\UsuarioController;
 use Illuminate\Support\Facades\Route;
 
 // Todo {id} das rotas é numérico; um id inválido cai em 404 antes do controller.
@@ -8,11 +7,7 @@ Route::pattern('id', '[0-9]+');
 
 require __DIR__.'/api/auth.php';
 
-Route::post('/refresh', [AuthController::class, 'refresh']);
-
 require __DIR__.'/api/statistics.php';
-
-Route::get('/user', [UsuarioController::class, 'show'])->middleware('auth:sanctum');
 
 require __DIR__.'/api/library.php';
 require __DIR__.'/api/habits.php';

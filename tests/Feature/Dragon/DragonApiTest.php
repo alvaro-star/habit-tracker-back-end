@@ -78,7 +78,7 @@ class DragonApiTest extends TestCase
         $id = $this->postJson('/api/dragon/dragons', $this->corpoDragao())->assertCreated()->json('data.id');
 
         $this->assertSame($id, $this->usuario->refresh()->fk_id_dragao);
-        $this->getJson('/api/user')->assertOk()->assertJsonPath('data.fk_id_dragao', $id);
+        $this->getJson('/api/auth/my-data')->assertOk()->assertJsonPath('data.fk_id_dragao', $id);
     }
 
     public function test_so_um_dragao_ativo_por_usuario(): void

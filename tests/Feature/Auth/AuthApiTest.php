@@ -102,6 +102,18 @@ class AuthApiTest extends TestCase
         $this->assertArrayHasKey('accessToken', $response->json());
     }
 
+    public function test_refresh_exige_token(): void
+    {
+        $this->postJson('/api/auth/refresh')->assertUnauthorized();
+    }
+
+    public function test_rotas_antigas_do_mock_nao_existem(): void
+    {
+        $this->postJson('/api/refresh')->assertNotFound();
+        $this->postJson('/api/login')->assertNotFound();
+        $this->getJson('/api/user')->assertNotFound();
+    }
+
     public function test_rotas_protegidas_exigem_token(): void
     {
         $this->getJson('/api/habits')->assertUnauthorized();
@@ -153,7 +165,7 @@ class AuthApiTest extends TestCase
         $usuario = User::factory()->create();
         Sanctum::actingAs($usuario);
 
-        $this->getJson('/api/user')
+        $this->getJson('/api/auth/my-data')
             ->assertOk()
             ->assertJsonStructure([
                 'data' => [
