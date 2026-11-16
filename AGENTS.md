@@ -34,7 +34,8 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/app -w /app --entrypoint p
 ## Banco de dados
 
 - O `.env.example` indica Postgres em `127.0.0.1:5433`, mas o `.env` local pode ter outros valores: confie no `.env`.
-- O `docker-compose.yaml` tem o serviço `db-database` (Postgres 17, porta `DB_PORT`, padrão 5433) e o `app` (`Dockerfile` + nginx, porta `APP_PORT`, padrão 8080), ambos lendo as variáveis `DB_*` do `.env`. No desenvolvimento, suba só o banco: `docker compose up -d db-database`.
+- O `docker-compose.yaml` tem o serviço `db-database` (Postgres 17, porta `DB_PORT`, padrão 5433), o `app` (`Dockerfile` + nginx, porta `APP_PORT`, padrão 8080) e o `scheduler` (mesma imagem, `php artisan schedule:work`, que dispara as tarefas de `routes/console.php`), todos lendo as variáveis `DB_*` do `.env`. No desenvolvimento, suba só o banco: `docker compose up -d db-database`.
+- O `.github/workflows/deploy.yml` publica a `main` no servidor de testes (a cada push na `main` ou à mão): recria `app` e `scheduler` e roda `migrate:fresh --seed`, que recria o banco com os gatilhos, a biblioteca (`BibliotecaSeeder`) e os dados de teste (`DadosDeTesteSeeder`, `admin@gmail.com` / `senha123`).
 - `docker/postgres/data/` é uma sobra de um container antigo e está no `.gitignore`: ignore.
 
 ## Arquitetura
@@ -53,6 +54,9 @@ O Swagger (Scramble) usa o docblock do método do controller como descrição do
 
 - **Peso e dificuldade:** o usuário envia o `peso` (inteiro de 1 a 20), e a `dificuldade` vem de `Dificuldade::doPeso()`: 1–5 `FACIL`, 6–10 `MEDIO`, 11–15 `DIFICIL`, 16–20 `MUITO_DIFICIL`. Uma `dificuldade` enviada é descartada.
 - **Data de criação e tipo de meta:** `created_at`/`data_criacao` não podem ser enviados no hábito (422; vêm do timestamp). O `tipo_meta` só muda enquanto o hábito não tem check-ins (senão, 422 pelo `HabitoService`).
+- **Unidade:** só as metas de `QUANTIDADE` têm unidade do usuário (até 20 caracteres); no `TEMPO` é sempre `minutos` e na `REALIZACAO` não há unidade (`HabitoService::comUnidadeDoTipoDeMeta()`).
+- **Meta positiva:** o `valor_meta` (maior que zero) é a meta dos hábitos `BOM` de `TEMPO` e `QUANTIDADE`; na `REALIZACAO` é descartado, e num hábito `RUIM` devolve 422 (`HabitoService::comMetaPositiva()`).
+- **Abstinência:** `habito.inicio_abstinencia` só existe nos hábitos `RUIM` (enviado, até agora, ou o momento do cadastro ou da troca para `RUIM`). O `Habito::marcoDaAbstinencia()` é o mais recente entre ele e o dia seguinte à última recaída (check-in que não seja `NAO_CONCLUIDO`), e o `diasSemPraticar()` conta os dias desde o marco. A resposta do hábito e o `GET /api/statistics/abstinence` usam a mesma regra.
 - **Exclusão de hábito:** o `DELETE /api/habits/{id}` só desativa (`ativo = false`, grava `inactivated_at`, mantém os check-ins, recalcula o XP de hoje) e só é permitido no dia em que o hábito foi criado (antes disso, 422). PATCH `ativo: false` grava o `inactivated_at`; `ativo: true` o limpa.
 - **TODO:** o XP diário e o progresso das estatísticas ainda filtram por `ativo = true`; os TODOs no `HabitoRepository`, `XpDiarioService` e `StatisticService` pedem para usar o `inactivated_at`.
 - **Frequência:** `habito.dia_frequencia` é `null` no `DIARIA`, `SEG`…`DOM` (`DiaSemana`) no `SEMANAL` e `1`…`31` no `MENSAL`. A `frequencia` e o `dia_frequencia` são sempre enviados juntos; a combinação é validada por `DiaFrequenciaValido` e `HabitoService::validarFrequencia()`.
@@ -65,9 +69,15 @@ O Swagger (Scramble) usa o docblock do método do controller como descrição do
 - **Elemento do dragão:** enum `ElementoDragao` (`FOGO`, `TERRA`, `AGUA`, `AR`), sem tabela, em `dragao.elemento` e `escolha_elemento.elemento`. Obrigatório no PUT a partir dos 6.000 XP (422); a resposta traz `elemento` e `precisa_escolher_elemento`, e cada troca grava a trajetória em `escolha_elemento`. Cenário e aparência ficam com o front-end.
 - **Dragão ativo:** só um dragão `ATIVO` por usuário, guardado em `users.fk_id_dragao` pelo `DragaoService` (422 em `status` ao tentar um segundo ativo).
 - **Santuário:** dragões com `status = SANTUARIO`, sem tabela própria. `GET /api/sanctuary` e `GET /api/sanctuary/{id}` (só leitura) devolvem nome, `arte_final_url`, `elemento`, datas de nascimento e de término, `tempo_total_dias` e a `trajetoria` de elementos. Ao passar para `SANTUARIO`, o `DragaoService` grava a `data_termino` (hoje, se não enviada) e gera o `tempo_total_dias` pelas datas. Um dragão do Santuário não pode ser excluído pela API (422); reativá-lo limpa o término e o tempo total.
+- **Renascimento:** `DragaoService::renascerSeConcluiuCiclo()` leva ao Santuário o dragão `ATIVO` com 9.000 XP do ciclo e elemento escolhido e cria um novo `ATIVO` (`NOME_NOVO_OVO`, 0 XP, nascido hoje), que vira o `users.fk_id_dragao`. O XP acima de 9.000, o `xp_vitalicio`, o nível e as insígnias não mudam. É chamado pelo `recalcularDia()` quando o XP sobe e no fim do PATCH do dragão; sem elemento, espera a escolha.
 - **XP vitalício:** `users.xp_vitalicio` (padrão 0) fica fora do `Fillable` do `User`.
 - **Níveis:** não há tabela de níveis. O `NivelService` calcula sem banco: `curva()` gera os intervalos dos 30 níveis de `config/progression.php` (nível 1 em 0 XP, passos ~10% maiores, nível 30 em 9.000 XP) e `nivelDoXp($xp)` devolve o nível. `User::getNivel()` o usa com o `xp_vitalicio`.
 - **Onboarding:** `users.onboarding_concluido` (padrão `false`) marca o primeiro acesso. `GET /api/onboarding` devolve a situação e `POST /api/onboarding` recebe de uma vez `ovo`, `nome_dragao`, `nome_usuario`, `objetivos` e `habitos`: o `OnboardingService` cria, numa transação, o dragão ativo, um hábito diário por modelo da biblioteca, o nome e os objetivos (`objetivo_usuario`). Segunda chamada: 409. O ovo é um texto livre em `dragao.ovo` (identificador do front-end), sem tabela nem enum.
+- **Sequência:** `users.streak_atual` conta os dias seguidos com check-in `CONCLUIDO`, recalculada pelo `StreakService` a cada check-in e no aviso de streak em risco.
+- **Notificações:** `NotificacaoService::enviarAvisosDeStreak()` e `enviarReengajamento()` (inatividade de 3 ou 7 dias, pelo `users.ultimo_acesso` do middleware `RegistrarUltimoAcesso`) gravam em `notifications` pelo canal `database`; o usuário lê em `GET /api/notifications` e configura em `/api/notifications/settings`. Os textos vêm do `GatilhoNotificacaoSeeder`.
+- **Estatísticas:** o `period` aceita `daily`, `weekly`, `monthly` e `yearly` (`resolvePeriodDates()`), ou `start_date`/`end_date` (padrão: últimos 30 dias). O `abstinence` traz por hábito ruim o marco, `dias_consecutivos`, `horas_totais` e o bloco `periodo` (`dias_considerados`, `dias_com_recaida`, `dias_limpos`, `maior_sequencia_limpa`, `recaidas_por_mes`).
+- **Tarefas periódicas:** sem jobs nem fila. São eventos `Schedule::call` em `routes/console.php` que chamam métodos dos services: `notificacoes:streak-em-risco` (15 min), `notificacoes:reengajamento` (de hora em hora) e `xp:pool-semanal` (segunda, 00:05).
+- **Conta e autenticação:** `routes/api/auth.php`, sob `/api/auth`: `register`, `login`, `forgot-password` e `reset-password` são públicas; `my-data`, `refresh`, `logout`, `onboarding` (PATCH) e `account` (DELETE) exigem `auth:sanctum`. Cadastro, login e refresh devolvem `user`, `accessToken` e `refreshToken` (tokens Sanctum); o refresh revoga o token enviado e emite um par novo.
 - **Usuário logado:** `GET /api/auth/my-data` (`Api/Auth/UsuarioController` + `UsuarioResource`) devolve o usuário com `xp_vitalicio`, `fk_id_dragao`, `onboarding_concluido` e o `nivel` anexado na resposta.
 
 ## Módulos e estrutura de pastas
@@ -103,15 +113,23 @@ Onde cada coisa fica:
 
 Regras:
 
-- Todas as rotas ficam em `auth:sanctum`, exceto cadastro e login do MOD1.
+- Todas as rotas ficam em `auth:sanctum`, exceto cadastro, login e redefinição de senha do MOD1.
+- O `routes/api.php` só carrega os arquivos de `routes/api/`; não defina rotas direto nele.
 - As pastas de módulo e as rotas seguem as convenções do Laravel, em inglês. As classes de domínio usam o nome da tabela do `docs/DER.md`, em português (`habito` → `Habito`, `HabitoService`, `HabitoController`). A exceção é o `usuario` do DER, que é a tabela `users` e o model `User`.
 - O `routes/api.php` registra `Route::pattern('id', '[0-9]+')`, e as `apiResource` mapeiam o parâmetro com `->parameters(['habits' => 'id'])`: um `{id}` não numérico cai em 404 antes do controller.
 - O `User` usa o atributo `#[Fillable]` (estilo Laravel 13) em vez da propriedade `$fillable`.
 - O histórico de migrations cria e depois remove as tabelas `nivel`, `estagio`, `ovo` e `elemento`; o schema final não tem nenhuma delas (foram substituídas pelos enums de `app/Enums`). Não recrie essas tabelas.
 - O MOD7 foge do padrão: `app/Services/Statistics/StatisticService.php` não estende `BaseService`, e as rotas são endpoints próprios, não `apiResource`. O `period` aceita `daily`, `weekly`, `monthly` e `yearly`. O `abstinence` usa a regra do MOD3 (`Habito::marcoDaAbstinencia()`: o `inicio_abstinencia` ou o dia seguinte à última recaída) e traz o bloco `periodo` (dias limpos, recaídas, maior sequência).
-- O MOD8 também usa `app/Notifications`. Não há jobs nem fila: as tarefas periódicas são eventos `Schedule::call` em `routes/console.php`, que chamam métodos dos services (aviso de streak, reengajamento e o `XpDiarioService::fecharPoolSemanal()`, ainda vazio), disparados pelo serviço `scheduler` do `docker-compose.yaml` (`php artisan schedule:work`).
+- O MOD8 também usa `app/Notifications`. Não crie jobs (`app/Jobs`) nem use a fila: uma tarefa periódica é um evento `Schedule::call` em `routes/console.php` que chama um método de service, disparado pelo serviço `scheduler` do `docker-compose.yaml` (`php artisan schedule:work`).
 
-Estado atual: todas as tabelas do DER têm model, repository e service, e cada service tem um controller com CRUD (`apiResource`, parâmetro `{id}`) no prefixo do seu módulo, documentado no Swagger em `/docs/api`. As regras listadas em "Regras de negócio implementadas" (MOD3 a MOD6, histórico de XP e usuário logado) já existem; faltam as demais do escopo e a autenticação real: o `Api/AuthController.php` ainda é um **mock** (`POST /api/login` com credenciais fixas e `POST /api/refresh` com tokens estáticos, sem Sanctum), com as rotas definidas direto no `routes/api.php`. Ainda não existem `routes/api/auth.php` nem `routes/api/onboarding.php` (o MOD8 hoje só tem as notificações em `routes/api/notifications.php`). Ao implementar o MOD1, substitua o mock, mova-o para `Api/Auth/` e as rotas para `routes/api/auth.php`.
+Estado atual: todas as tabelas do DER têm model, repository e service, e cada service tem um controller com CRUD (`apiResource`, parâmetro `{id}`) no prefixo do seu módulo, documentado no Swagger em `/docs/api`. Os módulos MOD1 a MOD8 têm as regras listadas em "Regras de negócio implementadas", com autenticação real por Sanctum.
+
+## Ainda não implementado
+
+- **Pool semanal (ESCOPO §3.3):** `XpDiarioService::fecharPoolSemanal()` já é agendado, mas está vazio (TODO); o `xpDoDia()` não deve mudar até o pool ser escrito.
+- **Lembrete diário (ESCOPO §7.2):** o `habito.horario_lembrete` existe, mas nenhum gatilho ou evento o usa.
+- **Push:** as notificações só saem pelo canal `database`.
+- **Arte do Santuário:** a `dragao.arte_final_url` nunca é preenchida pela API.
 
 ## Documentação
 
