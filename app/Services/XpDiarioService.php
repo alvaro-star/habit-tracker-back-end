@@ -190,6 +190,14 @@ class XpDiarioService extends BaseService
         ];
     }
 
+    /** Diz se o usuário tem hábitos no dia e ainda não fez todo o XP deles. */
+    public function faltaXpNoDia(int $usuarioId, CarbonInterface $data): bool
+    {
+        $xp = $this->xpDoDia($usuarioId, $data);
+
+        return $xp['peso_total'] > 0 && $xp['peso_realizado'] < $xp['peso_total'];
+    }
+
     /**
      * Peso cumprido de cada hábito na data, a partir do check-in (registro_habito):
      * CONCLUIDO soma o peso inteiro, EM_ANDAMENTO soma o peso proporcional ao
