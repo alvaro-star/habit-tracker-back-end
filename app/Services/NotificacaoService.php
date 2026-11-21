@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Enums\TipoGatilho;
+use App\Jobs\EnviarAvisoDeInatividade;
+use App\Jobs\EnviarLembreteDeHabito;
 use App\Models\GatilhoNotificacao;
 use App\Models\Habito;
 use App\Models\User;
@@ -11,6 +13,7 @@ use App\Repositories\ConfigNotificacaoRepository;
 use App\Repositories\GatilhoNotificacaoRepository;
 use App\Repositories\HabitoRepository;
 use App\Repositories\UsuarioRepository;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Collection;
@@ -20,11 +23,16 @@ class NotificacaoService
 {
     private const LIMITE_DE_RECEBIDAS = 50;
 
-    private const DIAS_INATIVIDADE_CURTA = 3;
+    /** Dias sem acesso que geram cada aviso. */
+    private const AVISOS_DE_INATIVIDADE = [
+        3 => TipoGatilho::INATIVIDADE_3_DIAS,
+        7 => TipoGatilho::INATIVIDADE_7_DIAS,
+    ];
 
-    private const DIAS_INATIVIDADE_LONGA = 7;
+    /** Menor que o intervalo de 4 horas do cron, para tolerar atrasos. */
+    private const HORAS_SEM_REPETIR_STREAK = 3;
 
-    private const JANELA_LEMBRETE_MINUTOS = 35;
+    private const MINUTOS_DO_BLOCO_DE_LEMBRETES = 30;
 
     public function __construct(
         protected UsuarioRepository $usuarios,
@@ -32,6 +40,7 @@ class NotificacaoService
         protected GatilhoNotificacaoRepository $gatilhos,
         protected ConfigNotificacaoRepository $configuracoes,
         protected StreakService $streaks,
+        protected XpDiarioService $xp,
     ) {}
 
     /** @return Collection<int, DatabaseNotification> as mais recentes primeiro */
@@ -41,9 +50,10 @@ class NotificacaoService
     }
 
     /**
-     * Avisa quem tem sequência ativa e ainda não concluiu um hábito hoje, uma vez
-     * por dia, a partir do horário configurado (ou do padrão). Também corrige a
-     * sequência de quem já a perdeu, porque nenhum check-in faria isso.
+     * A cada revisão, avisa quem tem sequência ativa e ainda não fez todo o XP do
+     * dia, a partir do horário configurado (ou do padrão). Quem não tem hábitos
+     * no dia não recebe. Também corrige a sequência de quem já a perdeu, porque
+     * nenhum check-in faria isso.
      *
      * @return int quantidade de avisos enviados
      */
@@ -54,7 +64,7 @@ class NotificacaoService
 
         $this->usuarios->comStreakAtiva(function (User $usuario) use ($gatilho, &$enviados) {
             if ($this->streaks->atualizar($usuario->id) === 0 || $gatilho === null
-                || $this->streaks->concluiuHoje($usuario->id)) {
+                || ! $this->xp->faltaXpNoDia($usuario->id, today())) {
                 return;
             }
 
@@ -65,80 +75,120 @@ class NotificacaoService
                 return;
             }
 
-            $enviados += (int) $this->enviar($usuario, $gatilho, today());
+            $enviados += (int) $this->enviar($usuario, $gatilho, now()->subHours(self::HORAS_SEM_REPETIR_STREAK));
         });
 
         return $enviados;
     }
 
     /**
-     * Envia o gatilho de 3 ou de 7 dias sem acesso, uma vez por período de
-     * inatividade. Quem já passou dos 7 dias recebe só o aviso de 7.
+     * Agenda, para o momento exato, os avisos de quem completa 3 ou 7 dias sem
+     * acesso hoje. Quem nunca acessou conta a partir do cadastro.
      *
-     * @return int quantidade de notificações enviadas
+     * @return int quantidade de avisos agendados
      */
-    public function enviarReengajamento(): int
+    public function agendarAvisosDeInatividade(): int
     {
-        $curta = $this->gatilhos->doTipo(TipoGatilho::INATIVIDADE_3_DIAS);
-        $longa = $this->gatilhos->doTipo(TipoGatilho::INATIVIDADE_7_DIAS);
-        $limiteLonga = now()->subDays(self::DIAS_INATIVIDADE_LONGA);
-        $enviados = 0;
+        $agendados = 0;
 
-        $this->usuarios->inativosDesde(now()->subDays(self::DIAS_INATIVIDADE_CURTA), function (User $usuario) use ($curta, $longa, $limiteLonga, &$enviados) {
-            $ultimoAcesso = $usuario->ultimo_acesso ?? $usuario->created_at;
-            $gatilho = $ultimoAcesso->lte($limiteLonga) ? $longa : $curta;
-
-            if ($gatilho !== null) {
-                $enviados += (int) $this->enviar($usuario, $gatilho, $ultimoAcesso);
+        foreach (self::AVISOS_DE_INATIVIDADE as $dias => $tipo) {
+            if ($this->gatilhos->doTipo($tipo) === null) {
+                continue;
             }
-        });
 
-        return $enviados;
+            $inicio = today()->subDays($dias);
+            $fim = $inicio->copy()->endOfDay();
+
+            $this->usuarios->comUltimoAcessoEntre($inicio, $fim, function (User $usuario) use ($dias, $tipo, &$agendados) {
+                $ultimoAcesso = $usuario->ultimo_acesso ?? $usuario->created_at;
+
+                EnviarAvisoDeInatividade::dispatch($usuario->id, $tipo, $ultimoAcesso->format('Y-m-d H:i:s'))
+                    ->delay($ultimoAcesso->copy()->addDays($dias));
+                $agendados++;
+            });
+        }
+
+        return $agendados;
     }
 
     /**
-     * Lembra dos hábitos cujo horário chegou desde a última revisão, uma vez por
-     * dia. A janela é um pouco maior que o intervalo do scheduler para cobrir
-     * atrasos. Na virada do dia, também envia os lembretes do fim do dia anterior.
+     * Executado pelo job quando o prazo se completa. Não envia se o usuário
+     * voltou a acessar depois do agendamento.
      *
-     * @return int quantidade de lembretes enviados
+     * @return bool se a notificação foi enviada
      */
-    public function enviarLembretesDeHabitos(): int
+    public function enviarAvisoDeInatividade(int $usuarioId, TipoGatilho $tipo, string $ultimoAcesso): bool
     {
-        $gatilho = $this->gatilhos->doTipo(TipoGatilho::LEMBRETE_DIARIO);
+        $usuario = $this->usuarios->encontrar($usuarioId);
+        $gatilho = $this->gatilhos->doTipo($tipo);
 
-        if ($gatilho === null) {
+        if ($usuario === null || $gatilho === null) {
+            return false;
+        }
+
+        $acessoAtual = $usuario->ultimo_acesso ?? $usuario->created_at;
+
+        if ($acessoAtual->format('Y-m-d H:i:s') !== $ultimoAcesso) {
+            return false;
+        }
+
+        return $this->enviar($usuario, $gatilho, $acessoAtual);
+    }
+
+    /**
+     * Agenda um job, no horário exato, para cada lembrete do bloco atual de 30
+     * minutos: o cron das 07:00 cobre de 07:00 a antes das 07:30, e o das 07:30,
+     * de 07:30 a antes das 08:00.
+     *
+     * @return int quantidade de lembretes agendados
+     */
+    public function agendarLembretesDeHabitos(): int
+    {
+        if ($this->gatilhos->doTipo(TipoGatilho::LEMBRETE_DIARIO) === null) {
             return 0;
         }
 
         $agora = now();
-        $inicio = $agora->copy()->subMinutes(self::JANELA_LEMBRETE_MINUTOS);
-        $enviados = 0;
+        $inicio = $agora->copy()->setTime($agora->hour, $agora->minute < self::MINUTOS_DO_BLOCO_DE_LEMBRETES ? 0 : self::MINUTOS_DO_BLOCO_DE_LEMBRETES);
+        $fim = $inicio->copy()->addMinutes(self::MINUTOS_DO_BLOCO_DE_LEMBRETES - 1);
+        $agendados = 0;
 
-        if (! $inicio->isSameDay($agora)) {
-            $enviados += $this->lembrarNoIntervalo($gatilho, $inicio, $inicio->format('H:i'), '23:59:59');
-            $inicio = $agora->copy()->startOfDay();
-        }
+        $this->habitos->comLembretePendente($inicio, $inicio->format('H:i'), $fim->format('H:i').':59', function (Habito $habito) use ($inicio, &$agendados) {
+            $horario = substr($habito->horario_lembrete, 0, 5);
 
-        return $enviados + $this->lembrarNoIntervalo($gatilho, $agora, $inicio->format('H:i'), $agora->format('H:i').':59');
-    }
-
-    private function lembrarNoIntervalo(GatilhoNotificacao $gatilho, CarbonInterface $data, string $inicio, string $fim): int
-    {
-        $enviados = 0;
-
-        $this->habitos->comLembretePendente($data, $inicio, $fim, function (Habito $habito) use ($gatilho, $data, &$enviados) {
-            $config = $this->configuracoes->doUsuarioNoGatilho($habito->fk_id_usuario, $gatilho->id);
-
-            if ($config?->ativo === false || ! $this->habitos->marcarLembreteEnviado($habito->id, $data)) {
-                return;
-            }
-
-            $this->entregar($habito->usuario, new GatilhoNotification($gatilho, $habito));
-            $enviados++;
+            EnviarLembreteDeHabito::dispatch($habito->id, $habito->fk_id_usuario, $inicio->toDateString(), $horario)
+                ->delay($inicio->copy()->setTimeFromTimeString($horario));
+            $agendados++;
         });
 
-        return $enviados;
+        return $agendados;
+    }
+
+    /**
+     * Executado pelo job no horário do lembrete. Confere de novo o hábito, que
+     * pode ter mudado depois do agendamento, e envia uma vez por dia.
+     *
+     * @return bool se a notificação foi enviada
+     */
+    public function enviarLembreteDeHabito(int $habitoId, int $usuarioId, string $data, string $horario): bool
+    {
+        $gatilho = $this->gatilhos->doTipo(TipoGatilho::LEMBRETE_DIARIO);
+        $dia = CarbonImmutable::parse($data);
+        $habito = $gatilho !== null ? $this->habitos->lembretePendente($habitoId, $usuarioId, $dia, $horario) : null;
+
+        if ($habito === null) {
+            return false;
+        }
+
+        $config = $this->configuracoes->doUsuarioNoGatilho($usuarioId, $gatilho->id);
+
+        if ($config?->ativo === false || ! $this->habitos->marcarLembreteEnviado($habito->id, $dia)) {
+            return false;
+        }
+
+        $this->entregar($habito->usuario, new GatilhoNotification($gatilho, $habito));
+
+        return true;
     }
 
     /** Envia se o gatilho não foi desativado pelo usuário nem já enviado desde a data. */

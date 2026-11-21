@@ -10,27 +10,34 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Tarefas periódicas: eventos do scheduler que chamam os métodos dos services
-// direto, sem jobs nem fila. Quem dispara é o serviço `scheduler` do
+// Tarefas periódicas: eventos do scheduler que chamam os métodos dos services.
+// Quem dispara é o serviço `scheduler` do
 // docker-compose (`php artisan schedule:work`), ou um cron com `schedule:run`.
 
-// Roda várias vezes ao dia porque cada usuário pode escolher o horário do aviso;
-// o NotificacaoService garante um único envio por dia.
+// A cada 4 horas, avisa quem tem sequência ativa e ainda não fez todo o XP do dia.
 Schedule::call(fn (NotificacaoService $notificacoes) => $notificacoes->enviarAvisosDeStreak())
-    ->everyFifteenMinutes()
+    ->everyFourHours()
     ->name('notificacoes:streak-em-risco')
     ->withoutOverlapping();
 
-Schedule::call(fn (NotificacaoService $notificacoes) => $notificacoes->enviarReengajamento())
-    ->hourly()
+// Uma vez por dia, agenda um job para o momento em que cada usuário completa
+// 3 ou 7 dias sem acesso.
+Schedule::call(fn (NotificacaoService $notificacoes) => $notificacoes->agendarAvisosDeInatividade())
+    ->daily()
     ->name('notificacoes:reengajamento')
     ->withoutOverlapping();
 
-// Revisa a cada 30 minutos: um lembrete pode sair até 30 minutos depois do horário.
-// O NotificacaoService garante um lembrete por hábito por dia.
-Schedule::call(fn (NotificacaoService $notificacoes) => $notificacoes->enviarLembretesDeHabitos())
+// A cada 30 minutos, agenda um job no horário exato de cada lembrete do bloco:
+// o cron das 07:00 cobre de 07:00 a antes das 07:30, e assim por diante.
+Schedule::call(fn (NotificacaoService $notificacoes) => $notificacoes->agendarLembretesDeHabitos())
     ->everyThirtyMinutes()
     ->name('notificacoes:lembretes-habitos')
+    ->withoutOverlapping();
+
+// Métricas do painel do Horizon.
+Schedule::command('horizon:snapshot')
+    ->everyFiveMinutes()
+    ->name('horizon:snapshot')
     ->withoutOverlapping();
 
 // Pool semanal (ESCOPO.md, seção 3.3): ainda não implementado; o método está vazio.
