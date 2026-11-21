@@ -40,6 +40,15 @@ class PushFcmTest extends TestCase
         return $usuario;
     }
 
+    private function avisar(User $usuario): bool
+    {
+        return app(NotificacaoService::class)->enviarAvisoDeInatividade(
+            $usuario->id,
+            TipoGatilho::INATIVIDADE_3_DIAS,
+            $usuario->fresh()->ultimo_acesso->format('Y-m-d H:i:s'),
+        );
+    }
+
     private function relatorioDeSucesso(string $token): MulticastSendReport
     {
         return MulticastSendReport::withItems([
@@ -118,7 +127,7 @@ class PushFcmTest extends TestCase
             ->andReturn($this->relatorioDeSucesso('token-a'));
         $this->app->instance(Messaging::class, $mensageria);
 
-        $this->assertSame(1, app(NotificacaoService::class)->enviarReengajamento());
+        $this->assertTrue($this->avisar($usuario));
         $this->assertSame(1, $usuario->notifications()->count());
     }
 
@@ -129,18 +138,18 @@ class PushFcmTest extends TestCase
         $this->app->instance(Messaging::class, $mensageria);
 
         $semToken = $this->usuarioInativo(null);
-        app(NotificacaoService::class)->enviarReengajamento();
+        $this->avisar($semToken);
         $this->assertSame(1, $semToken->notifications()->count());
 
         $semCredenciais = $this->usuarioInativo('token-b');
         config(['notifications.push_ativo' => false]);
-        app(NotificacaoService::class)->enviarReengajamento();
+        $this->avisar($semCredenciais);
         $this->assertSame(1, $semCredenciais->notifications()->count());
 
         config(['notifications.push_ativo' => true]);
         GatilhoNotificacao::query()->update(['canal' => CanalNotificacao::IN_APP]);
         $inApp = $this->usuarioInativo('token-c');
-        app(NotificacaoService::class)->enviarReengajamento();
+        $this->avisar($inApp);
         $this->assertSame(1, $inApp->notifications()->count());
     }
 
@@ -153,7 +162,7 @@ class PushFcmTest extends TestCase
         ]));
         $this->app->instance(Messaging::class, $mensageria);
 
-        app(NotificacaoService::class)->enviarReengajamento();
+        $this->avisar($usuario);
 
         $this->assertNull($usuario->fresh()->token_dispositivo);
         $this->assertSame(1, $usuario->notifications()->count());
@@ -170,7 +179,8 @@ class PushFcmTest extends TestCase
         );
         $this->app->instance(Messaging::class, $mensageria);
 
-        $this->assertSame(2, app(NotificacaoService::class)->enviarReengajamento());
+        $this->assertTrue($this->avisar($primeiro));
+        $this->assertTrue($this->avisar($segundo));
         $this->assertSame('token-a', $primeiro->fresh()->token_dispositivo);
         $this->assertSame(1, $segundo->notifications()->count());
     }

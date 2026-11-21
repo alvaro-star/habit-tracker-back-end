@@ -49,8 +49,8 @@ jobs:
           git log -1 --oneline
           echo "::endgroup::"
 
-          echo "::group::Recriar os containers da API e do scheduler"
-          docker compose up -d --build --force-recreate app scheduler
+          echo "::group::Recriar os containers da API, do scheduler e do Horizon"
+          docker compose up -d --build --force-recreate app scheduler horizon
           echo "::endgroup::"
 
           # O banco do servidor de testes é sempre destruído e recriado: todas as

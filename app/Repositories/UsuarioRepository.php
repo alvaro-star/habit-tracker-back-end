@@ -74,15 +74,21 @@ class UsuarioRepository extends BaseRepository
     }
 
     /**
-     * Usuários sem acesso desde a data. Quem nunca acessou conta a partir do cadastro.
+     * Usuários cujo último acesso está no intervalo. Quem nunca acessou conta a
+     * partir do cadastro.
      *
      * @param  Closure(User): void  $callback
      */
-    public function inativosDesde(CarbonInterface $limite, Closure $callback): void
+    public function comUltimoAcessoEntre(CarbonInterface $inicio, CarbonInterface $fim, Closure $callback): void
     {
         $this->consulta()
-            ->where(fn ($consulta) => $consulta->where('ultimo_acesso', '<=', $limite)
-                ->orWhere(fn ($semAcesso) => $semAcesso->whereNull('ultimo_acesso')->where('created_at', '<=', $limite)))
+            ->where(fn ($consulta) => $consulta->whereBetween('ultimo_acesso', [$inicio, $fim])
+                ->orWhere(fn ($semAcesso) => $semAcesso->whereNull('ultimo_acesso')->whereBetween('created_at', [$inicio, $fim])))
             ->eachById($callback);
+    }
+
+    public function encontrar(int $usuarioId): ?User
+    {
+        return $this->consulta()->find($usuarioId);
     }
 }

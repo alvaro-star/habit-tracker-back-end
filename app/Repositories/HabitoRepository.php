@@ -76,27 +76,48 @@ class HabitoRepository extends BaseRepository
     }
 
     /**
-     * Hábitos bons e ativos, de qualquer usuário, com lembrete entre os horários,
-     * que caem na data, ainda sem lembrete nela e sem check-in concluído.
+     * Hábitos de qualquer usuário com lembrete entre os horários, ainda pendentes
+     * na data.
      *
      * @param  Closure(Habito): void  $callback
      */
     public function comLembretePendente(CarbonInterface $data, string $inicio, string $fim, Closure $callback): void
     {
+        $this->consultaDeLembretesPendentes($data)
+            ->whereBetween('horario_lembrete', [$inicio, $fim])
+            ->eachById($callback);
+    }
+
+    /** O lembrete agendado, se o hábito ainda o espera naquele dia e horário (H:i). */
+    public function lembretePendente(int $habitoId, int $usuarioId, CarbonInterface $data, string $horario): ?Habito
+    {
+        return $this->consultaDeLembretesPendentes($data)
+            ->whereKey($habitoId)
+            ->where('fk_id_usuario', $usuarioId)
+            ->whereBetween('horario_lembrete', [$horario, $horario.':59'])
+            ->first();
+    }
+
+    /**
+     * Hábitos bons e ativos que caem na data, ainda sem lembrete nela e sem
+     * check-in concluído.
+     *
+     * @return Builder<Habito>
+     */
+    private function consultaDeLembretesPendentes(CarbonInterface $data): Builder
+    {
         $dia = $data->toDateString();
 
-        $this->consulta()
+        return $this->consulta()
             ->with('usuario')
             ->where('ativo', true)
             ->where('polaridade', Polaridade::BOM->value)
-            ->whereBetween('horario_lembrete', [$inicio, $fim])
             ->whereDate('created_at', '<=', $dia)
             ->where(fn (Builder $consulta) => $consulta->whereNull('ultimo_lembrete_em')->orWhere('ultimo_lembrete_em', '<>', $dia))
             ->whereDoesntHave('registros', fn (Builder $registros) => $registros
                 ->whereDate('data', $dia)
                 ->where('status', StatusRegistro::CONCLUIDO->value))
-            ->where(fn (Builder $consulta) => $this->caiNoDia($consulta, $data, DiaSemana::daData($data)))
-            ->eachById($callback);
+            ->where(fn (Builder $consulta) => $this->caiNoDia($consulta, $data, DiaSemana::daData($data)));
     }
 
     /** Marca o lembrete do dia; devolve false se outra execução já o marcou. */

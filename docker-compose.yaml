@@ -14,6 +14,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+  # Fila dos jobs. Sem porta publicada: só os containers do projeto a acessam.
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
   app:
     build: .
     env_file:
@@ -22,6 +34,11 @@ services:
     environment:
       DB_HOST: host.docker.internal
       DB_PORT: ${DB_PORT:-5433}
+      QUEUE_CONNECTION: redis
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: 'null'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     volumes:
@@ -31,6 +48,8 @@ services:
       - '${APP_PORT:-8080}:80'
     depends_on:
       db-database:
+        condition: service_healthy
+      redis:
         condition: service_healthy
   # Dispara as tarefas periódicas de routes/console.php (notificações, pool semanal):
   # mesma imagem da API, rodando o scheduler do Laravel em vez do nginx.
@@ -47,11 +66,49 @@ services:
     environment:
       DB_HOST: host.docker.internal
       DB_PORT: ${DB_PORT:-5433}
+      QUEUE_CONNECTION: redis
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: 'null'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     depends_on:
       db-database:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+  # Processa os jobs da fila: mesma imagem da API, rodando o Laravel Horizon.
+  horizon:
+    build: .
+    command: ['php', 'artisan', 'horizon']
+    user: www-data
+    restart: unless-stopped
+    # Dá tempo para o job em andamento (timeout de 60s) terminar antes de parar.
+    stop_grace_period: 70s
+    volumes:
+      # Chave do Firebase: fica no servidor, fora da imagem, e só para leitura.
+      - ./storage/app/private/firebase:/var/www/html/storage/app/private/firebase:ro
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DB_HOST: host.docker.internal
+      DB_PORT: ${DB_PORT:-5433}
+      QUEUE_CONNECTION: redis
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: 'null'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    depends_on:
+      db-database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 volumes:
   dbdatamigrate:
+    driver: local
+  redisdata:
     driver: local

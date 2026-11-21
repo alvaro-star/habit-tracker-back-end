@@ -44,9 +44,4 @@ class StreakService
 
         return $streak;
     }
-
-    public function concluiuHoje(int $usuarioId): bool
-    {
-        return in_array(CarbonImmutable::today()->toDateString(), $this->registros->diasConcluidosDoUsuario($usuarioId), true);
-    }
 }
