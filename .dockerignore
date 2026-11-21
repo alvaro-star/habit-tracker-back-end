@@ -11,6 +11,7 @@ public/build
 public/hot
 docker/postgres/data
 bootstrap/cache/*.php
+storage/app/private/firebase
 storage/logs/*
 storage/framework/cache/data/*
 storage/framework/sessions/*
