@@ -26,6 +26,13 @@ Schedule::call(fn (NotificacaoService $notificacoes) => $notificacoes->enviarRee
     ->name('notificacoes:reengajamento')
     ->withoutOverlapping();
 
+// Revisa a cada 30 minutos: um lembrete pode sair até 30 minutos depois do horário.
+// O NotificacaoService garante um lembrete por hábito por dia.
+Schedule::call(fn (NotificacaoService $notificacoes) => $notificacoes->enviarLembretesDeHabitos())
+    ->everyThirtyMinutes()
+    ->name('notificacoes:lembretes-habitos')
+    ->withoutOverlapping();
+
 // Pool semanal (ESCOPO.md, seção 3.3): ainda não implementado; o método está vazio.
 Schedule::call(fn (XpDiarioService $xpDiario) => $xpDiario->fecharPoolSemanal())
     ->weeklyOn(1, '00:05')

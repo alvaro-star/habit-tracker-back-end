@@ -4,14 +4,17 @@ namespace App\Services;
 
 use App\Enums\TipoGatilho;
 use App\Models\GatilhoNotificacao;
+use App\Models\Habito;
 use App\Models\User;
 use App\Notifications\GatilhoNotification;
 use App\Repositories\ConfigNotificacaoRepository;
 use App\Repositories\GatilhoNotificacaoRepository;
+use App\Repositories\HabitoRepository;
 use App\Repositories\UsuarioRepository;
 use Carbon\CarbonInterface;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Collection;
+use Kreait\Firebase\Exception\FirebaseException;
 
 class NotificacaoService
 {
@@ -21,8 +24,11 @@ class NotificacaoService
 
     private const DIAS_INATIVIDADE_LONGA = 7;
 
+    private const JANELA_LEMBRETE_MINUTOS = 35;
+
     public function __construct(
         protected UsuarioRepository $usuarios,
+        protected HabitoRepository $habitos,
         protected GatilhoNotificacaoRepository $gatilhos,
         protected ConfigNotificacaoRepository $configuracoes,
         protected StreakService $streaks,
@@ -90,6 +96,51 @@ class NotificacaoService
         return $enviados;
     }
 
+    /**
+     * Lembra dos hábitos cujo horário chegou desde a última revisão, uma vez por
+     * dia. A janela é um pouco maior que o intervalo do scheduler para cobrir
+     * atrasos. Na virada do dia, também envia os lembretes do fim do dia anterior.
+     *
+     * @return int quantidade de lembretes enviados
+     */
+    public function enviarLembretesDeHabitos(): int
+    {
+        $gatilho = $this->gatilhos->doTipo(TipoGatilho::LEMBRETE_DIARIO);
+
+        if ($gatilho === null) {
+            return 0;
+        }
+
+        $agora = now();
+        $inicio = $agora->copy()->subMinutes(self::JANELA_LEMBRETE_MINUTOS);
+        $enviados = 0;
+
+        if (! $inicio->isSameDay($agora)) {
+            $enviados += $this->lembrarNoIntervalo($gatilho, $inicio, $inicio->format('H:i'), '23:59:59');
+            $inicio = $agora->copy()->startOfDay();
+        }
+
+        return $enviados + $this->lembrarNoIntervalo($gatilho, $agora, $inicio->format('H:i'), $agora->format('H:i').':59');
+    }
+
+    private function lembrarNoIntervalo(GatilhoNotificacao $gatilho, CarbonInterface $data, string $inicio, string $fim): int
+    {
+        $enviados = 0;
+
+        $this->habitos->comLembretePendente($data, $inicio, $fim, function (Habito $habito) use ($gatilho, $data, &$enviados) {
+            $config = $this->configuracoes->doUsuarioNoGatilho($habito->fk_id_usuario, $gatilho->id);
+
+            if ($config?->ativo === false || ! $this->habitos->marcarLembreteEnviado($habito->id, $data)) {
+                return;
+            }
+
+            $this->entregar($habito->usuario, new GatilhoNotification($gatilho, $habito));
+            $enviados++;
+        });
+
+        return $enviados;
+    }
+
     /** Envia se o gatilho não foi desativado pelo usuário nem já enviado desde a data. */
     private function enviar(User $usuario, GatilhoNotificacao $gatilho, CarbonInterface $desde): bool
     {
@@ -100,8 +151,21 @@ class NotificacaoService
             return false;
         }
 
-        $usuario->notify(new GatilhoNotification($gatilho));
+        $this->entregar($usuario, new GatilhoNotification($gatilho));
 
         return true;
+    }
+
+    /**
+     * Uma falha do Firebase não pode impedir o envio aos próximos usuários.
+     * O banco é o primeiro canal, então a notificação já ficou gravada.
+     */
+    private function entregar(User $usuario, GatilhoNotification $notificacao): void
+    {
+        try {
+            $usuario->notify($notificacao);
+        } catch (FirebaseException $erro) {
+            report($erro);
+        }
     }
 }

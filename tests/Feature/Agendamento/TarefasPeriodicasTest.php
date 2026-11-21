@@ -26,6 +26,7 @@ class TarefasPeriodicasTest extends TestCase
 
         $this->assertSame('*/15 * * * *', $eventos['notificacoes:streak-em-risco']->expression);
         $this->assertSame('0 * * * *', $eventos['notificacoes:reengajamento']->expression);
+        $this->assertSame('*/30 * * * *', $eventos['notificacoes:lembretes-habitos']->expression);
         $this->assertSame('5 0 * * 1', $eventos['xp:pool-semanal']->expression);
 
         foreach ($eventos as $evento) {
