@@ -8,6 +8,7 @@ use App\Http\Requests\Auth\DeletarContaRequest;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\OnboardingRequest;
 use App\Http\Requests\Auth\RedefinirSenhaRequest;
+use App\Http\Requests\Auth\RefreshRequest;
 use App\Http\Requests\Auth\SolicitarRedefinicaoSenhaRequest;
 use App\Http\Resources\Auth\AuthResource;
 use App\Services\AuthService;
@@ -44,6 +45,7 @@ class AuthController extends Controller
      *
      * @bodyParam email string required E-mail do usuário.
      * @bodyParam password string required Senha do usuário.
+     * @bodyParam token_dispositivo string Token FCM do dispositivo; nulo mantém o anterior.
      */
     public function login(LoginRequest $request): JsonResponse
     {
@@ -58,11 +60,13 @@ class AuthController extends Controller
      * Revoga o token atual e emite um novo par (accessToken + refreshToken).
      * O token atual deve ser enviado como Bearer no header Authorization
      * e precisa ser um token válido do usuário autenticado.
+     *
+     * @bodyParam token_dispositivo string Token FCM do dispositivo; nulo mantém o anterior.
      */
-    public function refresh(Request $request): JsonResponse
+    public function refresh(RefreshRequest $request): JsonResponse
     {
         $token = $request->bearerToken();
-        $resultado = $this->service->refresh($request->user()->id, $token);
+        $resultado = $this->service->refresh($request->user()->id, $token, $request->toDto()->token_dispositivo);
 
         return (new AuthResource($resultado))->toResponse($request);
     }
@@ -70,8 +74,8 @@ class AuthController extends Controller
     /**
      * Logout.
      *
-     * Revoga todos os tokens do usuário. O front deve descartar o
-     * accessToken e o refreshToken após esta chamada.
+     * Revoga todos os tokens do usuário e remove o token do dispositivo.
+     * O front deve descartar o accessToken e o refreshToken após esta chamada.
      */
     public function logout(Request $request): JsonResponse
     {
