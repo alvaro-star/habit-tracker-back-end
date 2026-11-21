@@ -56,6 +56,7 @@ class AuthService
 
         // Atualiza o timestamp do último acesso
         $usuario->forceFill(['ultimo_acesso_at' => Carbon::now()])->save();
+        $this->atualizarTokenDispositivo($usuario->id, $dados->token_dispositivo);
 
         return array_merge(
             ['user' => $usuario],
@@ -68,7 +69,7 @@ class AuthService
      *
      * @throws RegraDeNegocioException 401
      */
-    public function refresh(int $usuarioId, string $tokenPlainText): array
+    public function refresh(int $usuarioId, string $tokenPlainText, ?string $tokenDispositivo = null): array
     {
         $tokenHash = hash('sha256', explode('|', $tokenPlainText, 2)[1] ?? $tokenPlainText);
 
@@ -83,6 +84,7 @@ class AuthService
         }
 
         $token->delete();
+        $this->atualizarTokenDispositivo($usuarioId, $tokenDispositivo);
 
         /** @var User $usuario */
         $usuario = User::query()->findOrFail($usuarioId);
@@ -94,11 +96,20 @@ class AuthService
     }
 
     /**
-     * Revoga todos os tokens do usuário.
+     * Revoga todos os tokens do usuário e para de enviar push ao dispositivo.
      */
     public function logout(int $usuarioId): void
     {
         $this->revogarTokens($usuarioId);
+        $this->usuarios->limparTokenDispositivo($usuarioId);
+    }
+
+    /** Um token nulo mantém o dispositivo já registrado. */
+    private function atualizarTokenDispositivo(int $usuarioId, ?string $tokenDispositivo): void
+    {
+        if ($tokenDispositivo !== null) {
+            $this->usuarios->definirTokenDispositivo($usuarioId, $tokenDispositivo);
+        }
     }
 
     /**

@@ -1,6 +1,6 @@
 # Habit Tracker — Modelo ER
 
-Reflete o banco depois de todas as migrations em `database/migrations`. As tabelas do framework (`migrations`, `cache`, `jobs`, `sessions`, `password_reset_tokens`, `personal_access_tokens` etc.) ficam de fora. As colunas que o escopo prevê, mas que ainda não existem no banco, estão em [Colunas planejadas](#colunas-planejadas).
+Reflete o banco depois de todas as migrations em `database/migrations`, conferido no PostgreSQL 17 (`information_schema`) em 2026-11-15, na `main` com os módulos MOD0 a MOD8. As tabelas internas do framework (`migrations`, `cache`, `jobs`, `sessions`, `password_reset_tokens`, `personal_access_tokens` etc.) ficam de fora; a `notifications` entra porque guarda as notificações do MOD8. As colunas que o escopo prevê, mas que ainda não existem no banco, estão em [Colunas planejadas](#colunas-planejadas).
 
 ```mermaid
 erDiagram
@@ -12,8 +12,10 @@ erDiagram
         varchar(255) password "NOT NULL"
         varchar(100) remember_token
         int xp_vitalicio "NOT NULL · default 0"
-        timestamp ultimo_acesso
+        timestamp ultimo_acesso_at "último login (MOD1)"
+        timestamp ultimo_acesso "último uso da API (MOD8)"
         int streak_atual "NOT NULL · default 0"
+        varchar(512) token_dispositivo "único · token FCM do aparelho"
         boolean onboarding_concluido "NOT NULL · default false"
         bigint fk_id_dragao FK "→ dragao (dragão ativo) · on delete set null"
         timestamp created_at
@@ -53,7 +55,8 @@ erDiagram
         boolean ativo "NOT NULL · default true"
         timestamp inactivated_at "quando foi desativado"
         timestamp inicio_abstinencia "só hábitos RUIM"
-        time horario_lembrete
+        time horario_lembrete "fuso de Campo Grande"
+        date ultimo_lembrete_em "último dia com lembrete enviado"
         timestamp created_at "NOT NULL · default now"
     }
     registro_habito {
@@ -117,6 +120,16 @@ erDiagram
         boolean ativo "NOT NULL"
         time horario
     }
+    notifications {
+        uuid id PK
+        varchar(255) type "NOT NULL · classe da notificação"
+        varchar(255) notifiable_type "NOT NULL · model User"
+        bigint notifiable_id "NOT NULL · → users (polimórfico, sem FK)"
+        text data "NOT NULL · JSON com o texto e o gatilho"
+        timestamp read_at
+        timestamp created_at
+        timestamp updated_at
+    }
 
     users ||--o{ objetivo_usuario : "fk_id_usuario"
     categoria ||--o{ objetivo_usuario : "fk_id_categoria"
@@ -133,6 +146,7 @@ erDiagram
     insignia ||--o{ usuario_insignia : "fk_id_insignia"
     users ||--o{ config_notificacao : "fk_id_usuario"
     gatilho_notificacao ||--o{ config_notificacao : "fk_id_gatilho"
+    users ||--o{ notifications : "notifiable_id"
 ```
 
 ## Enums
@@ -159,6 +173,7 @@ Os enums são guardados como texto (`varchar`) e validados pelos enums de `app/E
 | `users` | único em `email` | login |
 | `categoria` | único em `nome` | |
 | `registro_habito` | `registro_habito_habito_data_index` em (`fk_id_habito`, `data`) | busca do check-in de um hábito num dia |
+| `notifications` | (`notifiable_type`, `notifiable_id`) | notificações de um usuário |
 
 ## Regras do modelo
 
@@ -176,8 +191,13 @@ Os enums são guardados como texto (`varchar`) e validados pelos enums de `app/E
   - Ao entrar no Santuário, o dragão recebe a `data_termino` (hoje, se não foi enviada) e o `tempo_total_dias`, gerado pelas datas de nascimento e de término. Um dragão do Santuário não pode ser excluído pela API; ao ser reativado, perde a `data_termino` e o `tempo_total_dias`.
   - O `estagio` é gerado pelo `xp_ciclo` e atualizado sempre que ele muda; o marco de 6.000 XP (escolha do elemento) não é um estágio.
   - O `elemento` é o elemento atual (enum `elemento_dragao`) e passa a ser obrigatório a partir dos 6.000 XP do ciclo. Cada troca gera um registro em `escolha_elemento`, que é a trajetória. O cenário de fundo e a aparência da forma final de cada elemento ficam com o front-end.
+  - **Renascimento (MOD6-TASK12 a TASK17):** quando o dragão `ATIVO` chega ao `ADULTO_FINAL` (9.000 XP do ciclo) e já tem `elemento`, o `DragaoService::renascerSeConcluiuCiclo()` o leva ao Santuário (com `data_termino` e `tempo_total_dias`) e cria um novo dragão `ATIVO` ("Novo ovo", 0 XP, nascido hoje), apontado por `users.fk_id_dragao`. O `xp_vitalicio` e as insígnias não mudam. Sem elemento, o renascimento espera a escolha. Não há colunas a mais para isso.
   - Não há tabelas de ovo, de estágio nem de elemento. O `ovo` é um texto livre com o identificador do ovo escolhido no onboarding, definido pelo front-end.
-- **Onboarding:** o `users.onboarding_concluido` começa `false` e vira `true` quando o usuário conclui o fluxo do primeiro acesso, que cria o dragão ativo, os hábitos iniciais e os objetivos (`objetivo_usuario`).
+- **Onboarding:** o `users.onboarding_concluido` começa `false` e vira `true` quando o usuário conclui o fluxo do primeiro acesso, que cria o dragão ativo, os hábitos iniciais (copiados de `habito_modelo`) e os objetivos (`objetivo_usuario`).
+- **Biblioteca (`categoria` e `habito_modelo`):** catálogos preenchidos pelo `BibliotecaSeeder` com as 6 categorias e os 13 modelos da seção 6.1 do escopo. O hábito criado a partir de um modelo é uma cópia: não guarda o modelo de origem.
+- **Abstinência (hábitos ruins):** há dois cálculos. O hábito (`GET /api/habits`) conta os dias sem praticar a partir do `habito.inicio_abstinencia` e do último check-in que não seja `NAO_CONCLUIDO`. O `GET /api/statistics/abstinence` (`StatisticService`) ainda usa só o último check-in `CONCLUIDO` ou, sem recaída, o `created_at` do hábito, e não lê o `inicio_abstinencia`.
+- **Notificações:** os gatilhos (`gatilho_notificacao`, preenchidos pelo `GatilhoNotificacaoSeeder`) definem os tipos e os textos; a `config_notificacao` guarda o que cada usuário ativou e o horário; a `notifications` é a tabela padrão do Laravel com as notificações enviadas. A inatividade é medida pelo `users.ultimo_acesso`, gravado pelo middleware `RegistrarUltimoAcesso`; o `users.ultimo_acesso_at` é gravado só no login.
+- **Models em inglês:** `Category`, `Habit` e `HabitRecord` (do MOD7) apontam para as mesmas tabelas `categoria`, `habito` e `registro_habito` dos models `Categoria`, `Habito` e `RegistroHabito`. Não há tabelas a mais.
 
 ## Colunas planejadas
 

@@ -16,6 +16,7 @@ class LoginRequest extends ApiRequest
         return [
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
+            'token_dispositivo' => ['nullable', 'string', 'max:512'],
         ];
     }
 

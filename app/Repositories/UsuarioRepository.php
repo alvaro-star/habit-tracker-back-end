@@ -5,6 +5,7 @@ namespace App\Repositories;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Closure;
+use Illuminate\Support\Facades\DB;
 
 /** @extends BaseRepository<User> */
 class UsuarioRepository extends BaseRepository
@@ -39,6 +40,26 @@ class UsuarioRepository extends BaseRepository
     public function registrarAcesso(int $usuarioId): void
     {
         $this->consulta()->whereKey($usuarioId)->toBase()->update(['ultimo_acesso' => now()]);
+    }
+
+    /** Um aparelho pertence a uma conta por vez: tira o token de quem o usava antes. */
+    public function definirTokenDispositivo(int $usuarioId, string $token): void
+    {
+        DB::transaction(function () use ($usuarioId, $token) {
+            $this->consulta()->where('token_dispositivo', $token)->whereKeyNot($usuarioId)
+                ->toBase()->update(['token_dispositivo' => null]);
+            $this->consulta()->whereKey($usuarioId)->toBase()->update(['token_dispositivo' => $token]);
+        });
+    }
+
+    public function limparTokenDispositivo(int $usuarioId): void
+    {
+        $this->consulta()->whereKey($usuarioId)->toBase()->update(['token_dispositivo' => null]);
+    }
+
+    public function removerTokenDispositivo(string $token): void
+    {
+        $this->consulta()->where('token_dispositivo', $token)->toBase()->update(['token_dispositivo' => null]);
     }
 
     public function definirStreak(int $usuarioId, int $streak): void

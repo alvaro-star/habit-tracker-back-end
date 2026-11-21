@@ -8,6 +8,7 @@ use App\Enums\Polaridade;
 use App\Enums\StatusRegistro;
 use App\Models\Habito;
 use Carbon\CarbonInterface;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -69,15 +70,60 @@ class HabitoRepository extends BaseRepository
         return $this->consultaDoUsuario($usuarioId)
             ->where('ativo', true)
             ->whereDate('created_at', '<=', $data->toDateString())
-            ->where(fn (Builder $consulta) => $consulta
-                ->where('frequencia', Frequencia::DIARIA->value)
-                ->orWhere(fn (Builder $semanal) => $semanal
-                    ->where('frequencia', Frequencia::SEMANAL->value)
-                    ->where('dia_frequencia', $diaSemana->value))
-                ->orWhere(fn (Builder $mensal) => $mensal
-                    ->where('frequencia', Frequencia::MENSAL->value)
-                    ->where('dia_frequencia', (string) $data->day)))
+            ->where(fn (Builder $consulta) => $this->caiNoDia($consulta, $data, $diaSemana))
             ->orderBy('id')
             ->get();
+    }
+
+    /**
+     * Hábitos bons e ativos, de qualquer usuário, com lembrete entre os horários,
+     * que caem na data, ainda sem lembrete nela e sem check-in concluído.
+     *
+     * @param  Closure(Habito): void  $callback
+     */
+    public function comLembretePendente(CarbonInterface $data, string $inicio, string $fim, Closure $callback): void
+    {
+        $dia = $data->toDateString();
+
+        $this->consulta()
+            ->with('usuario')
+            ->where('ativo', true)
+            ->where('polaridade', Polaridade::BOM->value)
+            ->whereBetween('horario_lembrete', [$inicio, $fim])
+            ->whereDate('created_at', '<=', $dia)
+            ->where(fn (Builder $consulta) => $consulta->whereNull('ultimo_lembrete_em')->orWhere('ultimo_lembrete_em', '<>', $dia))
+            ->whereDoesntHave('registros', fn (Builder $registros) => $registros
+                ->whereDate('data', $dia)
+                ->where('status', StatusRegistro::CONCLUIDO->value))
+            ->where(fn (Builder $consulta) => $this->caiNoDia($consulta, $data, DiaSemana::daData($data)))
+            ->eachById($callback);
+    }
+
+    /** Marca o lembrete do dia; devolve false se outra execução já o marcou. */
+    public function marcarLembreteEnviado(int $habitoId, CarbonInterface $data): bool
+    {
+        $dia = $data->toDateString();
+
+        return $this->consulta()->whereKey($habitoId)
+            ->where(fn (Builder $consulta) => $consulta->whereNull('ultimo_lembrete_em')->orWhere('ultimo_lembrete_em', '<>', $dia))
+            ->toBase()->update(['ultimo_lembrete_em' => $dia]) === 1;
+    }
+
+    /**
+     * Os diários, os semanais do dia da semana e os mensais do dia do mês.
+     *
+     * @param  Builder<Habito>  $consulta
+     * @return Builder<Habito>
+     */
+    private function caiNoDia(Builder $consulta, CarbonInterface $data, DiaSemana $diaSemana): Builder
+    {
+        return $consulta
+            ->where('frequencia', Frequencia::DIARIA->value)
+            ->orWhere(fn (Builder $semanal) => $semanal
+                ->where('frequencia', Frequencia::SEMANAL->value)
+                ->where('dia_frequencia', $diaSemana->value))
+            ->orWhere(fn (Builder $mensal) => $mensal
+                ->where('frequencia', Frequencia::MENSAL->value)
+                ->where('dia_frequencia', (string) $data->day));
     }
 }

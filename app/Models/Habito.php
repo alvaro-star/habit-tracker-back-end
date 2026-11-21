@@ -52,6 +52,12 @@ class Habito extends Model
         ];
     }
 
+    /** @return BelongsTo<User, $this> */
+    public function usuario(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'fk_id_usuario');
+    }
+
     public function categoria(): BelongsTo
     {
         return $this->belongsTo(Categoria::class, 'fk_id_categoria');

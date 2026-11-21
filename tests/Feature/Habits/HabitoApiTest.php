@@ -195,7 +195,7 @@ class HabitoApiTest extends TestCase
         $this->assertDatabaseCount('habito', 0);
 
         $resposta = $this->postJson('/api/habits', $this->payload())->assertCreated();
-        $this->assertStringStartsWith('2026-11-09T08:30:00', $resposta->json('data.created_at'));
+        $this->assertStringStartsWith('2026-11-09T12:30:00', $resposta->json('data.created_at'));
 
         $this->putJson('/api/habits/'.$resposta->json('data.id'), ['created_at' => '2020-01-01 00:00:00'])
             ->assertUnprocessable()
@@ -466,7 +466,7 @@ class HabitoApiTest extends TestCase
         $this->deleteJson("/api/habits/{$habito->id}")->assertNoContent();
         $this->getJson("/api/habits/{$habito->id}")
             ->assertJsonPath('data.ativo', false)
-            ->assertJsonPath('data.inactivated_at', '2026-11-09T18:30:00.000000Z');
+            ->assertJsonPath('data.inactivated_at', '2026-11-09T22:30:00.000000Z');
 
         $this->patchJson("/api/habits/{$habito->id}", ['ativo' => true])
             ->assertOk()
@@ -475,7 +475,7 @@ class HabitoApiTest extends TestCase
         // Desativar pelo PATCH também guarda a data.
         $this->patchJson("/api/habits/{$habito->id}", ['ativo' => false])
             ->assertOk()
-            ->assertJsonPath('data.inactivated_at', '2026-11-09T18:30:00.000000Z');
+            ->assertJsonPath('data.inactivated_at', '2026-11-09T22:30:00.000000Z');
     }
 
     public function test_excluir_desativa_o_habito_sem_apagar_o_registro(): void

@@ -9,6 +9,7 @@ final readonly class LoginDTO extends DTO
     public function __construct(
         public ?string $email = null,
         public ?string $password = null,
+        public ?string $token_dispositivo = null,
     ) {}
 
     /** @param array<string, mixed> $dados */
@@ -17,6 +18,7 @@ final readonly class LoginDTO extends DTO
         return new self(
             email: self::texto($dados, 'email'),
             password: self::texto($dados, 'password'),
+            token_dispositivo: self::texto($dados, 'token_dispositivo'),
         );
     }
 
@@ -25,6 +27,7 @@ final readonly class LoginDTO extends DTO
         return $this->semNulos([
             'email' => $this->email,
             'password' => $this->password,
+            'token_dispositivo' => $this->token_dispositivo,
         ]);
     }
 }

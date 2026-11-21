@@ -24,6 +24,9 @@ services:
       DB_PORT: ${DB_PORT:-5433}
     extra_hosts:
       - 'host.docker.internal:host-gateway'
+    volumes:
+      # Chave do Firebase: fica no servidor, fora da imagem, e só para leitura.
+      - ./storage/app/private/firebase:/var/www/html/storage/app/private/firebase:ro
     ports:
       - '${APP_PORT:-8080}:80'
     depends_on:
@@ -35,6 +38,9 @@ services:
     build: .
     command: ['php', 'artisan', 'schedule:work']
     restart: unless-stopped
+    volumes:
+      # Chave do Firebase: fica no servidor, fora da imagem, e só para leitura.
+      - ./storage/app/private/firebase:/var/www/html/storage/app/private/firebase:ro
     env_file:
       - path: .env
         required: false

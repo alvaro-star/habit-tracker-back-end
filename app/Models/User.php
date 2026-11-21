@@ -17,7 +17,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'token_dispositivo'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -58,6 +58,12 @@ class User extends Authenticatable
     public function getNivel(): int
     {
         return app(NivelService::class)->nivelDoXp($this->xp_vitalicio ?? 0);
+    }
+
+    /** Destino das notificações do canal FCM. */
+    public function routeNotificationForFcm(): ?string
+    {
+        return $this->token_dispositivo;
     }
 
     /**
