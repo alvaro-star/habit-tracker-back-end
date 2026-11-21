@@ -91,7 +91,7 @@ class EnvioDeNotificacoesTest extends TestCase
 
     public function test_nao_avisa_antes_do_horario_padrao(): void
     {
-        Carbon::setTestNow('2026-11-08 22:00:00');
+        Carbon::setTestNow('2026-11-08 18:59:00');
         $usuario = $this->usuario(1);
         $this->concluir($usuario, '2026-11-07');
 

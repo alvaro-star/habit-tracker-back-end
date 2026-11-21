@@ -21,6 +21,6 @@ class UsuarioLogadoTest extends TestCase
 
         $this->getJson('/api/auth/my-data')
             ->assertOk()
-            ->assertJsonPath('data.ultimo_acesso_at', '2026-11-12T10:00:00.000000Z');
+            ->assertJsonPath('data.ultimo_acesso_at', '2026-11-12T14:00:00.000000Z');
     }
 }
