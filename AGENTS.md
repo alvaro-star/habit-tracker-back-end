@@ -75,8 +75,10 @@ O Swagger (Scramble) usa o docblock do método do controller como descrição do
 - **Onboarding:** `users.onboarding_concluido` (padrão `false`) marca o primeiro acesso. `GET /api/onboarding` devolve a situação e `POST /api/onboarding` recebe de uma vez `ovo`, `nome_dragao`, `nome_usuario`, `objetivos` e `habitos`: o `OnboardingService` cria, numa transação, o dragão ativo, um hábito diário por modelo da biblioteca, o nome e os objetivos (`objetivo_usuario`). Segunda chamada: 409. O ovo é um texto livre em `dragao.ovo` (identificador do front-end), sem tabela nem enum.
 - **Sequência:** `users.streak_atual` conta os dias seguidos com check-in `CONCLUIDO`, recalculada pelo `StreakService` a cada check-in e no aviso de streak em risco.
 - **Notificações:** `NotificacaoService::enviarAvisosDeStreak()` e `enviarReengajamento()` (inatividade de 3 ou 7 dias, pelo `users.ultimo_acesso` do middleware `RegistrarUltimoAcesso`) gravam em `notifications` pelo canal `database`; o usuário lê em `GET /api/notifications` e configura em `/api/notifications/settings`. Os textos vêm do `GatilhoNotificacaoSeeder`.
+- **Push (FCM, só Android):** a API só dispara. `login` e `refresh` aceitam `token_dispositivo` (nulo mantém o anterior), guardado em `users.token_dispositivo`; o logout o remove. O `GatilhoNotification` usa `database` e `FcmChannel` nos gatilhos `PUSH`, se houver token e `FIREBASE_CREDENTIALS`. Um `UNREGISTERED` apaga o token.
+- **Lembrete de hábito:** `notificacoes:lembretes-habitos` (a cada 30 minutos, com o nome do hábito como título do push) chama `NotificacaoService::enviarLembretesDeHabitos()`, com o gatilho `LEMBRETE_DIARIO`. A aplicação inteira roda em `America/Campo_Grande`, inclusive o `horario_lembrete`; entram só hábitos `BOM`, ativos, do dia e sem check-in `CONCLUIDO`, uma vez por dia (`habito.ultimo_lembrete_em`).
 - **Estatísticas:** o `period` aceita `daily`, `weekly`, `monthly` e `yearly` (`resolvePeriodDates()`), ou `start_date`/`end_date` (padrão: últimos 30 dias). O `abstinence` traz por hábito ruim o marco, `dias_consecutivos`, `horas_totais` e o bloco `periodo` (`dias_considerados`, `dias_com_recaida`, `dias_limpos`, `maior_sequencia_limpa`, `recaidas_por_mes`).
-- **Tarefas periódicas:** sem jobs nem fila. São eventos `Schedule::call` em `routes/console.php` que chamam métodos dos services: `notificacoes:streak-em-risco` (15 min), `notificacoes:reengajamento` (de hora em hora) e `xp:pool-semanal` (segunda, 00:05).
+- **Tarefas periódicas:** sem jobs nem fila. São eventos `Schedule::call` em `routes/console.php` que chamam métodos dos services: `notificacoes:streak-em-risco` (15 min), `notificacoes:reengajamento` (de hora em hora), `notificacoes:lembretes-habitos` (a cada 30 minutos) e `xp:pool-semanal` (segunda, 00:05).
 - **Conta e autenticação:** `routes/api/auth.php`, sob `/api/auth`: `register`, `login`, `forgot-password` e `reset-password` são públicas; `my-data`, `refresh`, `logout`, `onboarding` (PATCH) e `account` (DELETE) exigem `auth:sanctum`. Cadastro, login e refresh devolvem `user`, `accessToken` e `refreshToken` (tokens Sanctum); o refresh revoga o token enviado e emite um par novo.
 - **Usuário logado:** `GET /api/auth/my-data` (`Api/Auth/UsuarioController` + `UsuarioResource`) devolve o usuário com `xp_vitalicio`, `fk_id_dragao`, `onboarding_concluido` e o `nivel` anexado na resposta.
 
@@ -127,8 +129,6 @@ Estado atual: todas as tabelas do DER têm model, repository e service, e cada s
 ## Ainda não implementado
 
 - **Pool semanal (ESCOPO §3.3):** `XpDiarioService::fecharPoolSemanal()` já é agendado, mas está vazio (TODO); o `xpDoDia()` não deve mudar até o pool ser escrito.
-- **Lembrete diário (ESCOPO §7.2):** o `habito.horario_lembrete` existe, mas nenhum gatilho ou evento o usa.
-- **Push:** as notificações só saem pelo canal `database`.
 - **Arte do Santuário:** a `dragao.arte_final_url` nunca é preenchida pela API.
 
 ## Documentação
