@@ -2,13 +2,17 @@
 
 namespace App\Services;
 
+use App\DTOs\Notifications\NotificacaoManualDTO;
 use App\Enums\TipoGatilho;
+use App\Exceptions\RegraDeNegocioException;
 use App\Jobs\EnviarAvisoDeInatividade;
 use App\Jobs\EnviarLembreteDeHabito;
+use App\Jobs\EnviarNotificacaoManual;
 use App\Models\GatilhoNotificacao;
 use App\Models\Habito;
 use App\Models\User;
 use App\Notifications\GatilhoNotification;
+use App\Notifications\NotificacaoManual;
 use App\Repositories\ConfigNotificacaoRepository;
 use App\Repositories\GatilhoNotificacaoRepository;
 use App\Repositories\HabitoRepository;
@@ -16,6 +20,7 @@ use App\Repositories\UsuarioRepository;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Notifications\Notification;
 use Illuminate\Support\Collection;
 use Kreait\Firebase\Exception\FirebaseException;
 
@@ -191,6 +196,64 @@ class NotificacaoService
         return true;
     }
 
+    /**
+     * Agenda a notificação para o dia e o horário escolhidos: um job para o
+     * usuário informado ou, sem usuário, um job para cada usuário cadastrado. O
+     * minuto atual é aceito e sai logo em seguida.
+     *
+     * @return array{enviar_em: CarbonImmutable, destinatarios: int}
+     *
+     * @throws RegraDeNegocioException respondida como 422
+     */
+    public function agendarNotificacaoManual(int $remetenteId, NotificacaoManualDTO $dados): array
+    {
+        $enviarEm = CarbonImmutable::parse("{$dados->data} {$dados->horario}");
+
+        if ($enviarEm->lt(now()->startOfMinute())) {
+            throw new RegraDeNegocioException('horario', 'O dia e o horário do envio não podem estar no passado.');
+        }
+
+        if ($dados->fk_id_usuario !== null) {
+            $this->agendarEnvioManual($dados->fk_id_usuario, $remetenteId, $dados, $enviarEm);
+
+            return ['enviar_em' => $enviarEm, 'destinatarios' => 1];
+        }
+
+        $destinatarios = 0;
+
+        $this->usuarios->comTodos(function (User $usuario) use ($remetenteId, $dados, $enviarEm, &$destinatarios) {
+            $this->agendarEnvioManual($usuario->id, $remetenteId, $dados, $enviarEm);
+            $destinatarios++;
+        });
+
+        return ['enviar_em' => $enviarEm, 'destinatarios' => $destinatarios];
+    }
+
+    private function agendarEnvioManual(int $destinatarioId, int $remetenteId, NotificacaoManualDTO $dados, CarbonImmutable $enviarEm): void
+    {
+        EnviarNotificacaoManual::dispatch($destinatarioId, $remetenteId, $dados->titulo, $dados->texto)
+            ->delay($enviarEm);
+    }
+
+    /**
+     * Executado pelo job no horário escolhido. Não envia se o destinatário
+     * excluiu a conta depois do agendamento.
+     *
+     * @return bool se a notificação foi enviada
+     */
+    public function enviarNotificacaoManual(int $destinatarioId, int $remetenteId, string $titulo, string $texto): bool
+    {
+        $destinatario = $this->usuarios->encontrar($destinatarioId);
+
+        if ($destinatario === null) {
+            return false;
+        }
+
+        $this->entregar($destinatario, new NotificacaoManual($remetenteId, $titulo, $texto));
+
+        return true;
+    }
+
     /** Envia se o gatilho não foi desativado pelo usuário nem já enviado desde a data. */
     private function enviar(User $usuario, GatilhoNotificacao $gatilho, CarbonInterface $desde): bool
     {
@@ -210,7 +273,7 @@ class NotificacaoService
      * Uma falha do Firebase não pode impedir o envio aos próximos usuários.
      * O banco é o primeiro canal, então a notificação já ficou gravada.
      */
-    private function entregar(User $usuario, GatilhoNotification $notificacao): void
+    private function entregar(User $usuario, Notification $notificacao): void
     {
         try {
             $usuario->notify($notificacao);

@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Notifications;
 
+use App\DTOs\Notifications\ConfigNotificacaoDTO;
 use App\Models\ConfigNotificacao;
 use App\Models\GatilhoNotificacao;
 use App\Models\User;
+use App\Services\ConfigNotificacaoService;
 use Database\Seeders\GatilhoNotificacaoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -43,42 +45,31 @@ class ConfigNotificacaoApiTest extends TestCase
             ->assertJsonPath('data.0.horario', null);
     }
 
-    public function test_salva_e_substitui_a_configuracao(): void
+    public function test_lista_a_configuracao_salva_so_do_proprio_usuario(): void
     {
-        $url = "/api/notifications/settings/{$this->gatilho->id}";
+        app(ConfigNotificacaoService::class)->salvar(
+            $this->usuario->id,
+            $this->gatilho->id,
+            new ConfigNotificacaoDTO(false, '21:30'),
+        );
 
-        $this->putJson($url, ['ativo' => false, 'horario' => '21:30'])
-            ->assertOk()
-            ->assertJsonPath('data.ativo', false)
-            ->assertJsonPath('data.horario', '21:30')
-            ->assertJsonPath('data.tipo', 'STREAK_EM_RISCO');
-
-        $this->putJson($url, ['ativo' => true])
-            ->assertOk()
-            ->assertJsonPath('data.ativo', true)
-            ->assertJsonPath('data.horario', null);
-
+        $configuracao = collect($this->getJson('/api/notifications/settings')->assertOk()->json('data'))
+            ->firstWhere('tipo', 'STREAK_EM_RISCO');
+        $this->assertFalse($configuracao['ativo']);
+        $this->assertSame('21:30', $configuracao['horario']);
         $this->assertSame(1, ConfigNotificacao::where('fk_id_usuario', $this->usuario->id)->count());
-    }
-
-    public function test_nao_afeta_outro_usuario(): void
-    {
-        $this->putJson("/api/notifications/settings/{$this->gatilho->id}", ['ativo' => false])->assertOk();
 
         Sanctum::actingAs(User::factory()->create());
 
-        $this->getJson('/api/notifications/settings')->assertJsonPath('data.0.ativo', true);
+        $outro = collect($this->getJson('/api/notifications/settings')->json('data'))
+            ->firstWhere('tipo', 'STREAK_EM_RISCO');
+        $this->assertTrue($outro['ativo']);
     }
 
-    public function test_valida_os_campos(): void
+    public function test_put_de_configuracao_nao_esta_disponivel(): void
     {
-        $this->putJson("/api/notifications/settings/{$this->gatilho->id}", ['horario' => '25:00'])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors(['ativo', 'horario']);
-    }
+        $this->putJson("/api/notifications/settings/{$this->gatilho->id}", ['ativo' => false])->assertNotFound();
 
-    public function test_gatilho_inexistente_devolve_404(): void
-    {
-        $this->putJson('/api/notifications/settings/999', ['ativo' => true])->assertNotFound();
+        $this->assertSame(0, ConfigNotificacao::where('fk_id_usuario', $this->usuario->id)->count());
     }
 }

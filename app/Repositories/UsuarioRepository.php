@@ -87,6 +87,12 @@ class UsuarioRepository extends BaseRepository
             ->eachById($callback);
     }
 
+    /** @param Closure(User): void $callback */
+    public function comTodos(Closure $callback): void
+    {
+        $this->consulta()->select('id')->eachById($callback);
+    }
+
     public function encontrar(int $usuarioId): ?User
     {
         return $this->consulta()->find($usuarioId);
