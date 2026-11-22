@@ -5,36 +5,25 @@ namespace Tests\Feature\Notifications;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
-use Tests\Concerns\VerificaCrudDaApi;
 use Tests\TestCase;
 
 class GatilhoNotificacaoApiTest extends TestCase
 {
-    use RefreshDatabase, VerificaCrudDaApi;
+    use RefreshDatabase;
 
-    protected function setUp(): void
+    public function test_rotas_de_gatilhos_nao_estao_disponiveis(): void
     {
-        parent::setUp();
         Sanctum::actingAs(User::factory()->create());
-    }
 
-    public function test_crud_de_gatilhos(): void
-    {
-        $this->verificarCrud('/api/notifications/triggers', [
-            'tipo' => 'LEMBRETE_DIARIO',
-            'canal' => 'PUSH',
-            'frequencia' => 'DIARIA',
-            'texto_base' => 'Hora de cuidar dos seus hábitos!',
-        ], ['canal' => 'IN_APP']);
-    }
-
-    public function test_valida_canal(): void
-    {
-        $this->postJson('/api/notifications/triggers', [
-            'tipo' => 'LEMBRETE_DIARIO',
-            'canal' => 'EMAIL',
-            'frequencia' => 'DIARIA',
-            'texto_base' => 'Oi',
-        ])->assertUnprocessable()->assertJsonValidationErrors(['canal']);
+        foreach ([
+            ['GET', '/api/notifications/triggers'],
+            ['POST', '/api/notifications/triggers'],
+            ['GET', '/api/notifications/triggers/1'],
+            ['PUT', '/api/notifications/triggers/1'],
+            ['PATCH', '/api/notifications/triggers/1'],
+            ['DELETE', '/api/notifications/triggers/1'],
+        ] as [$metodo, $uri]) {
+            $this->json($metodo, $uri)->assertNotFound();
+        }
     }
 }

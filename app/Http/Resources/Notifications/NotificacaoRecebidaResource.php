@@ -16,6 +16,8 @@ class NotificacaoRecebidaResource extends JsonResource
             'id' => $this->id,
             'tipo' => $this->type,
             'canal' => $this->resource->data['canal'],
+            // Só as notificações manuais têm título próprio.
+            'titulo' => $this->resource->data['titulo'] ?? null,
             'texto' => $this->resource->data['texto'],
             'created_at' => $this->created_at,
         ];
