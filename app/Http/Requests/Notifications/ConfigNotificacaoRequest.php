@@ -14,7 +14,7 @@ class ConfigNotificacaoRequest extends ApiRequest
             /** Se o usuário quer receber este gatilho. */
             'ativo' => ['required', 'boolean'],
             /**
-             * Horário (HH:MM, em UTC) a partir do qual o aviso de streak em risco é enviado.
+             * Horário (HH:MM, no fuso de Campo Grande) a partir do qual o aviso de streak em risco é enviado.
              * Ausente ou null: usa o horário padrão. Não se aplica aos avisos de inatividade.
              */
             'horario' => ['nullable', 'date_format:H:i'],
