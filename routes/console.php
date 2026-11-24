@@ -34,8 +34,9 @@ Schedule::call(fn (NotificacaoService $notificacoes) => $notificacoes->agendarLe
     ->name('notificacoes:lembretes-habitos')
     ->withoutOverlapping();
 
-// A cada 30 minutos, lembra de entrar no app quem ainda não acessou hoje (um por dia).
-Schedule::call(fn (NotificacaoService $notificacoes) => $notificacoes->agendarLembretesDeAcesso())
+// A cada 30 minutos, o comando despacha o job que lembra de entrar no app quem
+// ainda não acessou hoje (um por dia).
+Schedule::command('notificacoes:lembrete-acesso')
     ->everyThirtyMinutes()
     ->name('notificacoes:lembrete-acesso')
     ->withoutOverlapping();
