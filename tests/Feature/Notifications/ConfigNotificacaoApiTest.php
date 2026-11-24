@@ -40,7 +40,7 @@ class ConfigNotificacaoApiTest extends TestCase
     {
         $this->getJson('/api/notifications/settings')
             ->assertOk()
-            ->assertJsonCount(4, 'data')
+            ->assertJsonCount(5, 'data')
             ->assertJsonPath('data.0.ativo', true)
             ->assertJsonPath('data.0.horario', null);
     }

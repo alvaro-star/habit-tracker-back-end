@@ -14,6 +14,7 @@ class GatilhoNotificacaoSeeder extends Seeder
     {
         $gatilhos = [
             [TipoGatilho::LEMBRETE_DIARIO, 'Horário agendado', 'Hora de {habito}! Seu dragão está contando com você.'],
+            [TipoGatilho::LEMBRETE_ACESSO, 'Diário', 'Seu dragão está esperando! Entre no app e registre seus hábitos de hoje.'],
             [TipoGatilho::STREAK_EM_RISCO, 'A cada 4 horas', 'Você ainda não cumpriu todos os hábitos de hoje. Complete-os para ganhar todo o XP do dia!'],
             [TipoGatilho::INATIVIDADE_3_DIAS, 'Evento', 'Seu dragão está com saudades! Volte e continue sua jornada.'],
             [TipoGatilho::INATIVIDADE_7_DIAS, 'Evento', 'Sua jornada está pausada. Que tal voltar com um hábito fácil hoje?'],
