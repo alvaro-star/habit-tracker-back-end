@@ -59,6 +59,17 @@ class LembreteDeAcessoTest extends TestCase
         Queue::assertPushed(EnviarLembreteDeAcesso::class, fn ($job) => $job->usuarioId === $this->usuario->id && $job->data === '2026-11-09');
     }
 
+    public function test_comando_despacha_o_job(): void
+    {
+        Queue::fake();
+
+        $this->artisan('notificacoes:lembrete-acesso')
+            ->expectsOutput('Lembretes de acesso despachados: 1')
+            ->assertSuccessful();
+
+        Queue::assertPushed(EnviarLembreteDeAcesso::class, fn ($job) => $job->usuarioId === $this->usuario->id);
+    }
+
     public function test_nao_despacha_para_quem_ja_acessou_ou_fez_login_hoje_ou_se_cadastrou_hoje(): void
     {
         $this->usuario->forceFill(['ultimo_acesso' => '2026-11-09 07:00:00'])->save();
