@@ -6,6 +6,7 @@ use App\DTOs\Notifications\NotificacaoManualDTO;
 use App\Enums\TipoGatilho;
 use App\Exceptions\RegraDeNegocioException;
 use App\Jobs\EnviarAvisoDeInatividade;
+use App\Jobs\EnviarLembreteDeAcesso;
 use App\Jobs\EnviarLembreteDeHabito;
 use App\Jobs\EnviarNotificacaoManual;
 use App\Models\GatilhoNotificacao;
@@ -138,6 +139,61 @@ class NotificacaoService
         }
 
         return $this->enviar($usuario, $gatilho, $acessoAtual);
+    }
+
+    /**
+     * A cada revisão, despacha o lembrete de entrar no app para quem ainda não
+     * acessou hoje, a partir do horário configurado (ou do padrão). Cada usuário
+     * recebe no máximo um por dia.
+     *
+     * @return int quantidade de lembretes despachados
+     */
+    public function agendarLembretesDeAcesso(): int
+    {
+        $gatilho = $this->gatilhos->doTipo(TipoGatilho::LEMBRETE_ACESSO);
+
+        if ($gatilho === null) {
+            return 0;
+        }
+
+        $hoje = today();
+        $agendados = 0;
+
+        $this->usuarios->comTodosSemAcessoDesde($hoje, function (User $usuario) use ($gatilho, $hoje, &$agendados) {
+            $config = $this->configuracoes->doUsuarioNoGatilho($usuario->id, $gatilho->id);
+            $horario = $config->horario ?? config('notifications.horario_lembrete_acesso');
+
+            if ($config?->ativo === false
+                || now()->lt($hoje->copy()->setTimeFromTimeString($horario))
+                || $usuario->notifications()->where('type', $gatilho->tipo)->where('created_at', '>=', $hoje)->exists()) {
+                return;
+            }
+
+            EnviarLembreteDeAcesso::dispatch($usuario->id, $hoje->toDateString());
+            $agendados++;
+        });
+
+        return $agendados;
+    }
+
+    /**
+     * Executado pelo job. Não envia se o dia já passou ou se o usuário entrou no
+     * app depois do despacho, e o enviar() impede um segundo lembrete no dia.
+     *
+     * @return bool se a notificação foi enviada
+     */
+    public function enviarLembreteDeAcesso(int $usuarioId, string $data): bool
+    {
+        $dia = CarbonImmutable::parse($data)->startOfDay();
+        $gatilho = $this->gatilhos->doTipo(TipoGatilho::LEMBRETE_ACESSO);
+
+        if ($gatilho === null || ! $dia->isSameDay(today())) {
+            return false;
+        }
+
+        $usuario = $this->usuarios->encontrarSemAcessoDesde($usuarioId, $dia);
+
+        return $usuario !== null && $this->enviar($usuario, $gatilho, $dia);
     }
 
     /**

@@ -28,10 +28,11 @@ class TarefasPeriodicasTest extends TestCase
         $this->assertSame('0 */4 * * *', $eventos['notificacoes:streak-em-risco']->expression);
         $this->assertSame('0 0 * * *', $eventos['notificacoes:reengajamento']->expression);
         $this->assertSame('*/30 * * * *', $eventos['notificacoes:lembretes-habitos']->expression);
+        $this->assertSame('*/30 * * * *', $eventos['notificacoes:lembrete-acesso']->expression);
         $this->assertSame('5 0 * * 1', $eventos['xp:pool-semanal']->expression);
         $this->assertSame('*/5 * * * *', $eventos['horizon:snapshot']->expression);
 
-        foreach (['notificacoes:streak-em-risco', 'notificacoes:reengajamento', 'notificacoes:lembretes-habitos', 'xp:pool-semanal'] as $nome) {
+        foreach (['notificacoes:streak-em-risco', 'notificacoes:reengajamento', 'notificacoes:lembretes-habitos', 'notificacoes:lembrete-acesso', 'xp:pool-semanal'] as $nome) {
             $this->assertInstanceOf(CallbackEvent::class, $eventos[$nome]);
         }
     }

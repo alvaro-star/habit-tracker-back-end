@@ -8,6 +8,9 @@ return [
      */
     'horario_streak_em_risco' => '08:00',
 
+    /* A partir de que horário sai o lembrete de entrar no app, para quem não configurou um. */
+    'horario_lembrete_acesso' => '18:00',
+
     /* Sem credenciais do Firebase, as notificações ficam só na tabela notifications. */
     'push_ativo' => filled(env('FIREBASE_CREDENTIALS', env('GOOGLE_APPLICATION_CREDENTIALS'))),
 

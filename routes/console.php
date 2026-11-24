@@ -34,6 +34,12 @@ Schedule::call(fn (NotificacaoService $notificacoes) => $notificacoes->agendarLe
     ->name('notificacoes:lembretes-habitos')
     ->withoutOverlapping();
 
+// A cada 30 minutos, lembra de entrar no app quem ainda não acessou hoje (um por dia).
+Schedule::call(fn (NotificacaoService $notificacoes) => $notificacoes->agendarLembretesDeAcesso())
+    ->everyThirtyMinutes()
+    ->name('notificacoes:lembrete-acesso')
+    ->withoutOverlapping();
+
 // Métricas do painel do Horizon.
 Schedule::command('horizon:snapshot')
     ->everyFiveMinutes()

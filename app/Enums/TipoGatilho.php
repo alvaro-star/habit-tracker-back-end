@@ -6,6 +6,7 @@ namespace App\Enums;
 enum TipoGatilho: string
 {
     case LEMBRETE_DIARIO = 'LEMBRETE_DIARIO';
+    case LEMBRETE_ACESSO = 'LEMBRETE_ACESSO';
     case STREAK_EM_RISCO = 'STREAK_EM_RISCO';
     case INATIVIDADE_3_DIAS = 'INATIVIDADE_3_DIAS';
     case INATIVIDADE_7_DIAS = 'INATIVIDADE_7_DIAS';

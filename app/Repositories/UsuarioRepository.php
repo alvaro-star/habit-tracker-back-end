@@ -5,6 +5,7 @@ namespace App\Repositories;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 /** @extends BaseRepository<User> */
@@ -85,6 +86,31 @@ class UsuarioRepository extends BaseRepository
             ->where(fn ($consulta) => $consulta->whereBetween('ultimo_acesso', [$inicio, $fim])
                 ->orWhere(fn ($semAcesso) => $semAcesso->whereNull('ultimo_acesso')->whereBetween('created_at', [$inicio, $fim])))
             ->eachById($callback);
+    }
+
+    /**
+     * Usuários cadastrados antes do início informado e que não usaram a API nem
+     * fizeram login desde então.
+     *
+     * @param  Closure(User): void  $callback
+     */
+    public function comTodosSemAcessoDesde(CarbonInterface $inicio, Closure $callback): void
+    {
+        $this->consultaSemAcessoDesde($inicio)->eachById($callback);
+    }
+
+    public function encontrarSemAcessoDesde(int $usuarioId, CarbonInterface $inicio): ?User
+    {
+        return $this->consultaSemAcessoDesde($inicio)->find($usuarioId);
+    }
+
+    /** @return Builder<User> */
+    private function consultaSemAcessoDesde(CarbonInterface $inicio): Builder
+    {
+        return $this->consulta()
+            ->where('created_at', '<', $inicio)
+            ->where(fn ($consulta) => $consulta->whereNull('ultimo_acesso')->orWhere('ultimo_acesso', '<', $inicio))
+            ->where(fn ($consulta) => $consulta->whereNull('ultimo_acesso_at')->orWhere('ultimo_acesso_at', '<', $inicio));
     }
 
     /** @param Closure(User): void $callback */
