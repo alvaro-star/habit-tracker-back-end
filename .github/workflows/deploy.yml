@@ -56,9 +56,6 @@ jobs:
           # O banco do servidor de testes é sempre destruído e recriado: todas as
           # tabelas são apagadas, as migrations rodam do zero e o seed recria os
           # dados de teste (usuário admin@gmail.com / senha123).
-          echo "::group::Recriar o banco (migrate:fresh --seed)"
-          docker compose exec -T app php artisan migrate:fresh --seed --force
-          echo "::endgroup::"
 
           docker image prune -f
           docker compose ps
